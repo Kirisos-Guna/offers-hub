@@ -138,6 +138,20 @@ def referenced_images() -> set[str]:
         return {r[0] for r in _conn.execute("SELECT image FROM offers WHERE image IS NOT NULL")}
 
 
+def offers_without_image(limit: int) -> list[dict]:
+    with _lock:
+        rows = _conn.execute(
+            f"SELECT * FROM offers WHERE image IS NULL ORDER BY {SORTS['latest']} LIMIT ?", (limit,)
+        ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def set_image(source_key: str, image: str) -> None:
+    with _lock:
+        _conn.execute("UPDATE offers SET image = ? WHERE source_key = ?", (image, source_key))
+        _conn.commit()
+
+
 def get_channel(link: str) -> dict | None:
     with _lock:
         row = _conn.execute("SELECT * FROM channels WHERE link = ?", (link,)).fetchone()

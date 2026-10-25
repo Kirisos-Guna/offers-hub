@@ -14,6 +14,7 @@ from telethon import TelegramClient, errors, events, functions, types, utils
 from telethon.sessions import StringSession
 
 import db
+import product_images
 from config import (BACKFILL_LIMIT, IMAGE_MAX_WIDTH, MEDIA_DIR, TG_API_HASH, TG_API_ID, TG_CHANNELS,
                     TG_SESSION, TG_SESSION_STRING)
 from offer_parser import parse_offer, store_for_url
@@ -128,6 +129,25 @@ async def handle_message(message, channel_title: str) -> None:
     posted_at = int(message.date.timestamp())
     if db.upsert_offer(source_key, channel_title, offer, posted_at, image):
         log.info("[%s] %s | %s | %s", channel_title, offer["store"], offer["price"], offer["title"][:60])
+        if image is None:
+            await fill_link_image(source_key, offer["links"])
+
+
+async def fill_link_image(source_key: str, links: list[dict]) -> bool:
+    """Gives a photo-less deal the product picture behind its link. Marks misses with "" so
+    they aren't retried every run."""
+    for link in links[:2]:
+        data = await product_images.image_for_link(link["url"])
+        if data:
+            try:
+                path = MEDIA_DIR / f"{source_key.replace(':', '_').replace('-', '')}.jpg"
+                path.write_bytes(_shrink(data))
+                db.set_image(source_key, f"/media/{path.name}")
+                return True
+            except Exception as exc:  # not a decodable image after all
+                log.info("bad product image for %s: %s", source_key, exc)
+    db.set_image(source_key, "")
+    return False
 
 
 async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:

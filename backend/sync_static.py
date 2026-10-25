@@ -27,6 +27,7 @@ from config import MEDIA_DIR, TG_API_HASH, TG_API_ID, TG_SESSION_STRING  # noqa:
 
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 log = logging.getLogger("sync")
+BACKFILL_IMAGES = 400  # at most this many older deals get an image lookup per run
 
 
 async def sync() -> None:
@@ -39,6 +40,13 @@ async def sync() -> None:
             await telegram_source.sync_channel(client, link, chat)
     finally:
         await client.disconnect()
+    # Deals saved before the link-image lookup existed (or whose lookup was cut short).
+    found = 0
+    missing = db.offers_without_image(BACKFILL_IMAGES)
+    for offer in missing:
+        found += await telegram_source.fill_link_image(offer["source_key"], offer["links"])
+    if missing:
+        log.info("link images: %d found for %d deals without a photo", found, len(missing))
 
 
 def export() -> bool:
