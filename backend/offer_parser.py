@@ -38,8 +38,16 @@ STORE_WORDS = {
 IGNORED_HOSTS = ("t.me", "telegram.me", "telegram.org", "youtube.com", "youtu.be", "instagram.com",
                  "whatsapp.com", "wa.me", "chat.whatsapp.com")
 
+# A price follows ₹/Rs/at/@/starts/loot/from, or starts a line ("199 https://...").
+# Not a price when it's a discount: "72% Off", "Flat ₹8000 Off".
 PRICE_RE = re.compile(
-    r"(?:₹|rs\.?|inr|\bat\b|@|\bstarts?\s*(?:at|@|from)?)\s*₹?\s*(\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?",
+    r"(?:₹|rs\.?|inr|\bat\b|@|\bstarts?\s*(?:at|@|from)?|\bloot\b|\bfrom\b|^)\s*₹?\s*"
+    r"(\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?(?![\d,.]*\s*(?:%|off\b))",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Titles that are only a price or a promo word: the product is only in the post's photo.
+WEAK_TITLE_RE = re.compile(
+    r"(?:(?:big\s+)?loot|grab|deal|lowest|flat|upto|price\s+drop|offer|from|starts?|at|bank|\+|[₹\d,.\s])*",
     re.IGNORECASE,
 )
 MRP_RE = re.compile(r"\bmrp\s*[:\-]?\s*(?:₹|rs\.?)?\s*(\d{1,3}(?:,\d{2,3})+|\d+)", re.IGNORECASE)
@@ -47,8 +55,13 @@ DISCOUNT_RE = re.compile(r"(\d{1,2})\s*%\s*off", re.IGNORECASE)
 # "GRAB : ..."  "Loot : ..."  "72% Off : ..."
 TAG_RE = re.compile(r"^\s*([^:\n]{2,24}?)\s*:\s+(?!//)")
 TITLE_TAIL_RE = re.compile(
-    r"\s*(?:\bstarts?\s*(?:at|@|from)?|\bat\b|@|₹|\brs\.?)\s*₹?\s*[\d,]+(?:\.\d+)?.*$", re.IGNORECASE
+    r"\s*(?:\bstarts?\s*(?:at|@|from)?|\bat\b|@|₹|\brs\.?)\s*₹?\s*[\d,]+(?:\.\d+)?(?![\d,]*\s*off\b).*$",
+    re.IGNORECASE,
 )
+
+
+def is_weak_title(title: str) -> bool:
+    return WEAK_TITLE_RE.fullmatch(title.strip()) is not None
 
 
 def store_for_url(url: str) -> str | None:
@@ -153,10 +166,16 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
         lowered = text.lower()
         store = next((s for w, s in STORE_WORDS.items() if w in lowered), None)
 
+    store = store or "Other"
+    weak = is_weak_title(title)
+    if weak:  # filled in from the product page later when possible
+        title = f"{store} deal" if store != "Other" else "Deal"
+
     return {
         "title": title[:200],
+        "weak_title": weak,
         "tag": tag,
-        "store": store or "Other",
+        "store": store,
         "price": price,
         "mrp": mrp,
         "discount": discount,
@@ -168,5 +187,7 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
 
 def dedupe_key(offer: dict) -> str:
     """Same deal reposted across sister channels gets the same key."""
+    if offer.get("weak_title"):  # "Amazon deal" says nothing; only the link identifies it
+        return f"url|{offer['url']}"
     words = re.sub(r"[^a-z0-9]+", "", offer["title"].lower())[:60]
     return f"{words}|{offer.get('price') or ''}"

@@ -112,6 +112,8 @@ async def handle_message(message, channel_title: str) -> None:
         return
     if offer["store"] == "Other":
         offer["store"] = await _store_from_redirect(offer["url"]) or "Other"
+        if offer["weak_title"] and offer["store"] != "Other":
+            offer["title"] = placeholder_title(offer["store"])
 
     source_key = f"tg:{message.chat_id}:{message.id}"
     image = None
@@ -129,25 +131,35 @@ async def handle_message(message, channel_title: str) -> None:
     posted_at = int(message.date.timestamp())
     if db.upsert_offer(source_key, channel_title, offer, posted_at, image):
         log.info("[%s] %s | %s | %s", channel_title, offer["store"], offer["price"], offer["title"][:60])
-        if image is None:
-            await fill_link_image(source_key, offer["links"])
+        if image is None or offer["weak_title"]:
+            await enrich_from_link(source_key, offer["links"], need_image=image is None,
+                                   need_title=offer["weak_title"])
 
 
-async def fill_link_image(source_key: str, links: list[dict]) -> bool:
-    """Gives a photo-less deal the product picture behind its link. Marks misses with "" so
-    they aren't retried every run."""
+def placeholder_title(store: str) -> str:
+    return f"{store} deal" if store != "Other" else "Deal"
+
+
+async def enrich_from_link(source_key: str, links: list[dict], need_image: bool, need_title: bool) -> bool:
+    """Fills in what a post lacks from the product behind its link: the picture for a deal
+    without a photo, the product name for a title that is only a price. Misses are recorded so
+    they aren't retried every run. Returns True when an image was found."""
+    image_path, title = None, None
     for link in links[:2]:
-        data = await product_images.image_for_link(link["url"])
-        if data:
+        data, found_title = await product_images.lookup(link["url"], want_image=need_image and not image_path,
+                                                         want_title=need_title and not title)
+        title = title or found_title
+        if data and not image_path:
             try:
                 path = MEDIA_DIR / f"{source_key.replace(':', '_').replace('-', '')}.jpg"
                 path.write_bytes(_shrink(data))
-                db.set_image(source_key, f"/media/{path.name}")
-                return True
+                image_path = f"/media/{path.name}"
             except Exception as exc:  # not a decodable image after all
                 log.info("bad product image for %s: %s", source_key, exc)
-    db.set_image(source_key, "")
-    return False
+        if (image_path or not need_image) and (title or not need_title):
+            break
+    db.save_lookup(source_key, (image_path or "") if need_image else None, title)
+    return image_path is not None
 
 
 async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:
@@ -155,10 +167,18 @@ async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:
     # A string session keeps no entity cache, so load the joined chats once instead of
     # re-checking every invite link (Telegram rate-limits those checks).
     dialogs = {d.id: d.entity for d in await client.get_dialogs() if d.is_channel}
+    by_title = {chat.title.casefold(): chat for chat in dialogs.values()}
     opened = []
     for link in TG_CHANNELS:
         known = db.get_channel(link)
         chat = dialogs.get(known["peer_id"]) if known else None
+        if chat is None and link.startswith("title:"):
+            # A channel the account has already joined, named instead of linked.
+            chat = by_title.get(link[len("title:"):].strip().casefold())
+            if chat is None:
+                log.error("no joined channel is named %r", link[len("title:"):])
+                continue
+            db.save_channel(link, utils.get_peer_id(chat), chat.title, 0)
         if chat is None:
             try:
                 chat = await resolve_channel(client, link)

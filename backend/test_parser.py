@@ -51,6 +51,27 @@ def test_hidden_link_from_entities():
     assert o["title"] == "Orient LED Desk Lamp"
 
 
+def test_price_only_posts_get_weak_title():
+    o = parse_offer("199 https://link.amazon/B0e5CD37D")
+    assert o["price"] == 199 and o["weak_title"] and o["title"] == "Amazon deal"
+    o = parse_offer("Loot 4891 https://link.amazon/B0eFrfPLb\n\nSelected Location")
+    assert o["price"] == 4891 and o["weak_title"]
+    o = parse_offer("Loot from ₹174.\n\nhttps://amzn.to/4yDn7Uc")
+    assert o["price"] == 174 and o["weak_title"]
+    o = parse_offer("Loot 3499 + Bank Offer. \n\nhttps://amzn.to/4zds6w8")
+    assert o["price"] == 3499 and o["weak_title"]
+
+
+def test_flat_rupee_off_is_not_price():
+    o = parse_offer("Flat ₹8000 Off On Ray-Ban Meta (Gen 2) AI Glasses.\n\nMatte Black : https://amzn.to/4snPBQn")
+    assert o["title"] == "Flat ₹8000 Off On Ray-Ban Meta (Gen 2) AI Glasses"
+    assert o["price"] is None and not o["weak_title"]
+
+
+def test_named_product_is_not_weak():
+    assert not parse_offer("Yellow Hat at 449.\n\nhttps://amzn.to/4BmgyrR")["weak_title"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

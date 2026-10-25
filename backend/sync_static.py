@@ -39,6 +39,7 @@ from telethon import events, utils  # noqa: E402
 import db  # noqa: E402
 import telegram_source  # noqa: E402
 from config import MEDIA_DIR, TG_API_HASH, TG_API_ID, TG_SESSION_STRING  # noqa: E402
+from offer_parser import is_weak_title  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("sync")
@@ -75,14 +76,19 @@ def publish() -> None:
         log.info("published")
 
 
-async def fill_missing_images() -> None:
-    """Deals saved before the link-image lookup existed (or whose lookup was cut short)."""
-    missing = db.offers_without_image(BACKFILL_IMAGES)
+async def fill_from_links() -> None:
+    """Deals saved before the link lookups existed (or whose lookup was cut short)."""
+    marked = db.mark_weak_titles(is_weak_title, telegram_source.placeholder_title)
+    if marked:
+        log.info("%d older deals have only a price as title", marked)
+    pending = db.offers_needing_lookup(BACKFILL_IMAGES)
     found = 0
-    for offer in missing:
-        found += await telegram_source.fill_link_image(offer["source_key"], offer["links"])
-    if missing:
-        log.info("link images: %d found for %d deals without a photo", found, len(missing))
+    for offer in pending:
+        found += await telegram_source.enrich_from_link(
+            offer["source_key"], offer["links"], need_image=offer["image"] is None,
+            need_title=offer["weak_title"] == 1)
+    if pending:
+        log.info("link lookups: %d deals, %d images found", len(pending), found)
 
 
 async def main() -> None:
@@ -98,7 +104,7 @@ async def main() -> None:
                 await telegram_source.sync_channel(client, link, chat)
 
         await catch_up()
-        await fill_missing_images()
+        await fill_from_links()
         publish()
         if not args.watch or not opened:
             return

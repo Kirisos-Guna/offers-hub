@@ -30,7 +30,8 @@ TG_SESSION = str(BASE_DIR / os.environ.get("TG_SESSION", "offers"))
 # Used instead of the session file when set (GitHub Actions secret, printed by login.py --string).
 TG_SESSION_STRING = _secret("TG_SESSION_STRING")
 
-# Invite links (t.me/+...), public links (t.me/name) or @usernames, comma separated.
+# Invite links (t.me/+...), public links (t.me/name), @usernames, or "title:<name>" for a
+# channel the account already joined; comma separated.
 DEFAULT_CHANNELS = [
     "https://t.me/+Th6aG5Zaxz_i_u7a",
     "https://t.me/+lEEQraQyKwljNGQ1",
@@ -39,6 +40,8 @@ DEFAULT_CHANNELS = [
     "https://t.me/+uV5wcTkUWJEwM2Y1",
     "https://t.me/+7rHGiXC8TnsxN2I9",
     "https://t.me/+kTvbwlaPbH1mM2E1",  # Offerzone 3.0
+    # Joined channels can also be named; dcloots.in itself refuses automated requests.
+    "title:DC LOOTS Offers And Deals",
 ]
 TG_CHANNELS = [c.strip() for c in os.environ.get("TG_CHANNELS", "").split(",") if c.strip()] or DEFAULT_CHANNELS
 
