@@ -18,12 +18,17 @@ def _load_env_file(path: Path) -> None:
 
 _load_env_file(BASE_DIR / ".env")
 
+def _secret(name: str) -> str:
+    # Values pasted or piped on Windows can carry a byte-order mark or stray whitespace.
+    return os.environ.get(name, "").strip().lstrip("﻿").strip()
+
+
 # From https://my.telegram.org -> API development tools
-TG_API_ID = int(os.environ.get("TG_API_ID", "0") or 0)
-TG_API_HASH = os.environ.get("TG_API_HASH", "")
+TG_API_ID = int(_secret("TG_API_ID") or 0)
+TG_API_HASH = _secret("TG_API_HASH")
 TG_SESSION = str(BASE_DIR / os.environ.get("TG_SESSION", "offers"))
 # Used instead of the session file when set (GitHub Actions secret, printed by login.py --string).
-TG_SESSION_STRING = os.environ.get("TG_SESSION_STRING", "")
+TG_SESSION_STRING = _secret("TG_SESSION_STRING")
 
 # Invite links (t.me/+...), public links (t.me/name) or @usernames, comma separated.
 DEFAULT_CHANNELS = [
