@@ -42,7 +42,8 @@ fun OfferCard(offer: Offer, imageUrl: String?, onClick: () -> Unit, modifier: Mo
             offer.discount?.let {
                 DiscountBadge(it, Modifier.align(Alignment.TopStart).padding(8.dp))
             }
-            if (imageUrl != null) { // the placeholder already shows the store name
+            // The placeholder already shows the store name; "Other" says nothing worth a badge.
+            if (imageUrl != null && offer.store != "Other") {
                 StoreBadge(offer.store, Modifier.align(Alignment.BottomStart).padding(8.dp))
             }
         }
@@ -90,7 +91,7 @@ private fun StorePlaceholder(store: String, modifier: Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            store,
+            if (store == "Other") "Deal" else store,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = Color.White,

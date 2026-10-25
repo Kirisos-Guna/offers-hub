@@ -26,6 +26,7 @@ STORE_DOMAINS = {
     "firstcry.com": "FirstCry", "snapdeal.com": "Snapdeal", "pepperfry.com": "Pepperfry",
     "decathlon.in": "Decathlon", "lenskart.com": "Lenskart", "boat-lifestyle.com": "boAt",
     "mamaearth.in": "Mamaearth", "pharmeasy.in": "PharmEasy", "1mg.com": "Tata 1mg",
+    "goibibo.com": "Goibibo", "makemytrip.com": "MakeMyTrip",
 }
 # Words in the post that name a store, used when the link is an unknown shortener.
 STORE_WORDS = {

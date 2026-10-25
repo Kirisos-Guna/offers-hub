@@ -59,7 +59,7 @@ fun OfferDetailSheet(offer: Offer, imageUrl: String?, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StoreBadge(offer.store)
+                if (offer.store != "Other") StoreBadge(offer.store)
                 offer.displayTag?.let {
                     Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }

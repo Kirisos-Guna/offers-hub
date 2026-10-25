@@ -202,7 +202,9 @@ private fun OfferGrid(state: OffersUiState, vm: OffersViewModel, onOpen: (Offer)
     LaunchedEffect(state.selectedStore, state.sort, state.query) { gridState.scrollToItem(0) }
 
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 165.dp),
+        // 140dp keeps two columns on phones even with a larger display size (S24 at "Large" is
+        // ~340dp wide); tablets and landscape get more.
+        columns = GridCells.Adaptive(minSize = 140.dp),
         state = gridState,
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
