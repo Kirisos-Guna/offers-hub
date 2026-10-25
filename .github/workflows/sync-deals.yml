@@ -1,0 +1,61 @@
+# Every ~10 minutes: read new posts from the Telegram channels and publish deals + images
+# to the gh-pages branch, which GitHub Pages serves to the app as offers.json.
+name: Sync deals
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # GitHub may start scheduled runs a few minutes late
+  workflow_dispatch:
+
+concurrency:
+  group: sync-deals
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the published site (previous state)
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
+          else
+            mkdir site
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r backend/requirements.txt
+
+      - name: Sync channels
+        id: sync
+        working-directory: backend
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_SESSION_STRING: ${{ secrets.TG_SESSION_STRING }}
+          BACKFILL_LIMIT: "100"
+          KEEP_DAYS: "7"
+        run: python sync_static.py ../site
+
+      # One fresh commit each time (force-pushed), so old images don't pile up in git history.
+      - name: Publish
+        if: steps.sync.outputs.changed == 'true'
+        working-directory: site
+        run: |
+          rm -rf .git
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="deals-bot" -c user.email="actions@users.noreply.github.com" commit -q -m "Update deals"
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages

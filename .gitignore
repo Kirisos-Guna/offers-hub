@@ -1,0 +1,13 @@
+backend/.venv/
+backend/.env
+backend/*.session
+backend/*.session-journal
+backend/offers.db
+backend/media/
+__pycache__/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+.idea/

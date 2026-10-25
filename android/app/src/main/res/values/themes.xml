@@ -1,0 +1,4 @@
+<resources>
+    <style name="Theme.OffersHub" parent="android:Theme.Material.Light.NoActionBar" />
+    <color name="ic_launcher_background">#E8590C</color>
+</resources>
