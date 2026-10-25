@@ -38,6 +38,7 @@ DEFAULT_CHANNELS = [
     "https://t.me/+FpXKV70NYNY0NzQ1",
     "https://t.me/+uV5wcTkUWJEwM2Y1",
     "https://t.me/+7rHGiXC8TnsxN2I9",
+    "https://t.me/+kTvbwlaPbH1mM2E1",  # Offerzone 3.0
 ]
 TG_CHANNELS = [c.strip() for c in os.environ.get("TG_CHANNELS", "").split(",") if c.strip()] or DEFAULT_CHANNELS
 
