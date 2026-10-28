@@ -5,6 +5,8 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,7 +44,7 @@ import com.offershub.app.data.ThemeMode
 
 private val DISCOUNT_STEPS = listOf(0, 50, 70, 80)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
@@ -86,7 +88,7 @@ fun SettingsScreen(
                             selected = themeMode == mode,
                             onClick = { settings.setThemeMode(mode) },
                             shape = SegmentedButtonDefaults.itemShape(index, ThemeMode.entries.size),
-                        ) { Text(mode.label) }
+                        ) { Text(mode.label, maxLines = 1, softWrap = false) }
                     }
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -112,12 +114,17 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(top = 12.dp),
                     )
-                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Wraps to a second line with large fonts or narrow screens instead of squeezing.
+                    FlowRow(
+                        Modifier.padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         DISCOUNT_STEPS.forEach { step ->
                             FilterChip(
                                 selected = minDiscount == step,
                                 onClick = { settings.setMinDiscount(step) },
-                                label = { Text(if (step == 0) "Any" else "$step% off") },
+                                label = { Text(if (step == 0) "Any" else "$step% off", maxLines = 1, softWrap = false) },
                             )
                         }
                     }
@@ -208,8 +215,8 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
 
 @Composable
 private fun InfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

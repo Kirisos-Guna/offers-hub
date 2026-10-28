@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -155,12 +157,20 @@ fun StoreBadge(store: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Price and crossed-out MRP; the MRP moves to its own line when both don't fit (large fonts). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PriceRow(offer: Offer, modifier: Modifier = Modifier, large: Boolean = false) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.Bottom,
+    ) {
         if (offer.price != null) {
             Text(
                 formatPrice(offer.price),
+                maxLines = 1,
+                softWrap = false,
                 style = if (large) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -175,6 +185,8 @@ fun PriceRow(offer: Offer, modifier: Modifier = Modifier, large: Boolean = false
         if (offer.mrp != null && offer.mrp != offer.price) {
             Text(
                 formatPrice(offer.mrp),
+                maxLines = 1,
+                softWrap = false,
                 style = if (large) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textDecoration = TextDecoration.LineThrough,
