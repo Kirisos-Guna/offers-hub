@@ -35,7 +35,8 @@ SAFETY_POLL_SECONDS = 60
 HOUSEKEEPING_SECONDS = 3600
 LOOKUP_BACKLOG = 400
 
-status = {"state": "starting", "started_at": int(time.time()), "last_deal_at": None, "channels": 0}
+status = {"state": "starting", "started_at": int(time.time()), "last_deal_at": None, "channels": 0,
+          "error": None}
 
 
 async def serve_status(port: int) -> asyncio.AbstractServer:
@@ -159,15 +160,23 @@ async def run_forever() -> None:
     server = await serve_status(int(os.environ.get("PORT", "7860")))
     try:
         while not stop.is_set():
+            retry_in = 30
             try:
+                status["error"] = None
                 await main()
-            except Exception:
-                status["state"] = "reconnecting"
+            except SystemExit as exc:
+                # Missing or wrong settings: stay up and show the problem on the status page
+                # (messages never include secret values), then try again in a few minutes.
+                status["state"], status["error"] = "error", str(exc.code)[:300]
+                log.error("cannot start: %s", exc.code)
+                retry_in = 300
+            except Exception as exc:
+                status["state"], status["error"] = "reconnecting", f"{type(exc).__name__}: {exc}"[:300]
                 log.exception("listener stopped; restarting in 30 s")
-                try:
-                    await asyncio.wait_for(stop.wait(), timeout=30)
-                except asyncio.TimeoutError:
-                    pass
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=retry_in)
+            except asyncio.TimeoutError:
+                pass
     finally:
         server.close()
         db.close()
