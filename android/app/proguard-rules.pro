@@ -5,6 +5,9 @@
 # ("NoSuchMethodException: WorkDatabase_Impl.<init>" at startup).
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
 
+# Firebase finds its components by reflection.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
+
 # Readable stack traces in crash reports.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

@@ -33,7 +33,8 @@ as a Telegram user account. Use a spare account that has joined the channels.
 ## Production setup
 
 ### 1. Firebase (free Spark plan)
-1. **Firestore Database** → Create → production mode → location `us-central1`.
+1. **Firestore Database** → Create → **Standard edition**, database ID `(default)`,
+   location `asia-south1` (Mumbai, closest to users in India), production mode.
    In its **Rules** tab, paste `firebase/firestore.rules` and publish.
 2. **Project settings → Your apps → Android**: package `com.offershub.app`. Download
    `google-services.json` to `android/app/google-services.json` (git-ignored).
