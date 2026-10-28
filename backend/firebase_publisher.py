@@ -1,25 +1,25 @@
-"""Pushes deals from the local database to Firebase, where the app reads them live.
+"""Pushes deals from the local database to Firebase (works on the free Spark plan).
 
 - Firestore `offers/<id>`: one document per deal; the app listens to this collection, so a
   new deal appears on open screens within a second or two.
-- Storage `media/<file>.jpg`: deal images, served through Firebase download-token URLs.
 - Cloud Messaging topic `deals`: one high-priority data message per new deal, so phones can
   show a notification even when the app is closed.
+- Firestore `state/channels`: where each channel was read up to. Together with the offers
+  themselves this lets a listener whose disk was wiped (Hugging Face restarts) pick up exactly
+  where it left off, without duplicate notifications.
 
-The local SQLite table `published` remembers what was written, so restarts only send changes.
+Images are already public HTTPS links (image_store.py), so nothing is uploaded here.
+The local SQLite table `published` remembers what was written, so only changes are sent.
 """
 import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
-import uuid
 from datetime import timedelta
-from pathlib import Path
-from urllib.parse import quote, unquote, urlparse
 
 import db
-from config import MEDIA_DIR
 
 log = logging.getLogger("firebase")
 
@@ -33,53 +33,36 @@ def doc_id(source_key: str) -> str:
     return source_key.replace(":", "_")
 
 
+def _hash(doc: dict) -> str:
+    return hashlib.sha1(json.dumps(doc, sort_keys=True).encode()).hexdigest()
+
+
 class Publisher:
-    def __init__(self, firestore_client, bucket, messaging):
+    def __init__(self, firestore_client, messaging):
         self._fs = firestore_client
-        self._bucket = bucket
         self._messaging = messaging
         self._lock = asyncio.Lock()
+        self._saved_channels: dict | None = None
 
     @classmethod
-    def from_environment(cls, bucket_name: str) -> "Publisher":
-        """Uses Application Default Credentials: the VM's service account in production, or
-        GOOGLE_APPLICATION_CREDENTIALS pointing at a key file elsewhere."""
+    def from_environment(cls) -> "Publisher":
+        """FIREBASE_SERVICE_ACCOUNT holds the service-account key JSON (Firebase console →
+        Project settings → Service accounts → Generate new private key). Without it,
+        Application Default Credentials are used."""
         import firebase_admin
-        from firebase_admin import firestore, messaging, storage
+        from firebase_admin import credentials, firestore, messaging
 
         if not firebase_admin._apps:
-            firebase_admin.initialize_app(options={"storageBucket": bucket_name})
-        return cls(firestore.client(), storage.bucket(), messaging)
-
-    # --- images -----------------------------------------------------------------------------
-
-    def _upload_image(self, local: str) -> str | None:
-        """Uploads /media/<file> and returns its public download URL."""
-        path = MEDIA_DIR / Path(local).name
-        if not path.exists():
-            return None
-        blob_name = f"media/{path.name}"
-        token = str(uuid.uuid4())
-        blob = self._bucket.blob(blob_name)
-        blob.metadata = {"firebaseStorageDownloadTokens": token}
-        blob.cache_control = "public, max-age=604800"
-        blob.upload_from_filename(str(path), content_type="image/jpeg")
-        return (f"https://firebasestorage.googleapis.com/v0/b/{self._bucket.name}/o/"
-                f"{quote(blob_name, safe='')}?alt=media&token={token}")
-
-    def _delete_image(self, url: str | None) -> None:
-        if not url or "/o/" not in url:
-            return
-        blob_name = unquote(urlparse(url).path.split("/o/", 1)[1])
-        try:
-            self._bucket.blob(blob_name).delete()
-        except Exception as exc:  # already gone is fine
-            log.debug("image delete %s: %s", blob_name, exc)
+            key = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
+            cred = credentials.Certificate(json.loads(key)) if key else credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred)
+        return cls(firestore.client(), messaging)
 
     # --- documents --------------------------------------------------------------------------
 
     @staticmethod
-    def _document(row: dict, image_url: str | None) -> dict:
+    def _document(row: dict) -> dict:
+        image = row["image"] or ""
         return {
             "source": row["source"],
             "title": row["title"],
@@ -88,28 +71,26 @@ class Publisher:
             "price": row["price"],
             "mrp": row["mrp"],
             "discount": row["discount"],
-            "image": image_url,
+            "image": image if image.startswith("http") else None,
             "url": row["url"],
             "links": row["links"],
             "text": row["text"],
             "posted_at": row["posted_at"],
+            # Listener bookkeeping, used to rebuild its database after a restart.
+            "key": row["source_key"],
+            "dedupe": row["dedupe_key"],
+            "weak": row["weak_title"],
+            "raw_image": row["image"],
         }
 
-    def _publish_row(self, row: dict, state: dict | None) -> tuple[dict, str | None, bool]:
-        """Writes the deal if it changed. Returns (document, image URL, written?)."""
-        image_url = state.get("image_blob") if state else None
-        local = row["image"] or ""
-        if local.startswith("/media/") and (not image_url or Path(local).name not in unquote(image_url)):
-            image_url = self._upload_image(local) or image_url
-        elif local.startswith("http"):
-            image_url = local
-        doc = self._document(row, image_url)
-        doc_hash = hashlib.sha1(json.dumps(doc, sort_keys=True).encode()).hexdigest()
+    def _publish_row(self, row: dict, state: dict | None) -> tuple[dict, bool]:
+        doc = self._document(row)
+        doc_hash = _hash(doc)
         if state and state["hash"] == doc_hash:
-            return doc, image_url, False
+            return doc, False
         self._fs.collection(COLLECTION).document(doc_id(row["source_key"])).set(doc)
-        db.set_published(row["source_key"], doc_hash, image_url)
-        return doc, image_url, True
+        db.set_published(row["source_key"], doc_hash, None)
+        return doc, True
 
     def _notify(self, key: str, doc: dict) -> None:
         if time.time() - doc["posted_at"] > NOTIFY_WITHIN_SECONDS or not db.mark_notified(key):
@@ -133,12 +114,40 @@ class Publisher:
         self._messaging.send(message)
         log.info("notified: %s", doc["title"][:60])
 
-    def _delete(self, key: str, state: dict) -> None:
+    def _delete(self, key: str) -> None:
         self._fs.collection(COLLECTION).document(doc_id(key)).delete()
-        self._delete_image(state.get("image_blob"))
         db.forget_published(key)
 
+    def _save_channels(self) -> None:
+        channels = {c["link"]: {"peer_id": c["peer_id"], "title": c["title"], "last_id": c["last_id"]}
+                    for c in db.all_channels()}
+        if channels != self._saved_channels:
+            self._fs.collection("state").document("channels").set({"channels": channels})
+            self._saved_channels = channels
+
+    def _restore(self) -> int:
+        """Rebuilds an empty local database from Firestore. Returns the deals restored."""
+        state = self._fs.collection("state").document("channels").get()
+        if state.exists:
+            for link, c in (state.to_dict() or {}).get("channels", {}).items():
+                db.save_channel(link, c["peer_id"], c["title"], c["last_id"])
+        restored = 0
+        for snap in self._fs.collection(COLLECTION).stream():
+            doc = snap.to_dict() or {}
+            if not doc.get("key"):
+                continue
+            db.restore_offer(doc, _hash(doc))
+            restored += 1
+        self._saved_channels = None
+        return restored
+
     # --- public API (async; Firebase clients are blocking) ----------------------------------
+
+    async def restore_if_empty(self) -> None:
+        if db.all_offer_rows() or db.all_channels():
+            return
+        restored = await asyncio.to_thread(self._restore)
+        log.info("restored %d deals and channel positions from Firestore", restored)
 
     async def publish(self, source_key: str, notify: bool) -> None:
         """Publishes one deal right after it was saved; announces it when notify is set."""
@@ -146,9 +155,8 @@ class Publisher:
             row = db.get_offer(source_key)
             if row is None:
                 return
-            state = db.published_state().get(source_key)
             try:
-                doc, _, _ = await asyncio.to_thread(self._publish_row, row, state)
+                doc, _ = await asyncio.to_thread(self._publish_row, row, db.published_state().get(source_key))
                 if notify:
                     await asyncio.to_thread(self._notify, source_key, doc)
             except Exception:
@@ -159,7 +167,13 @@ class Publisher:
             states = db.published_state()
             for key in source_keys:
                 if key in states:
-                    await asyncio.to_thread(self._delete, key, states[key])
+                    await asyncio.to_thread(self._delete, key)
+
+    async def save_channels(self) -> None:
+        try:
+            await asyncio.to_thread(self._save_channels)
+        except Exception:
+            log.exception("saving channel positions failed")
 
     async def full_sync(self) -> None:
         """Brings Firebase in line with the database: writes changed deals, deletes gone ones."""
@@ -169,7 +183,7 @@ class Publisher:
             written = 0
             for row in rows:
                 try:
-                    _, _, changed = await asyncio.to_thread(self._publish_row, row, states.get(row["source_key"]))
+                    _, changed = await asyncio.to_thread(self._publish_row, row, states.get(row["source_key"]))
                     written += changed
                 except Exception:
                     log.exception("publishing %s failed", row["source_key"])
@@ -177,8 +191,9 @@ class Publisher:
             gone = [key for key in states if key not in live]
             for key in gone:
                 try:
-                    await asyncio.to_thread(self._delete, key, states[key])
+                    await asyncio.to_thread(self._delete, key)
                 except Exception:
                     log.exception("deleting %s failed", key)
             if written or gone:
                 log.info("firebase sync: %d written, %d deleted, %d live", written, len(gone), len(live))
+        await self.save_channels()

@@ -15,7 +15,8 @@ from telethon.sessions import StringSession
 
 import db
 import product_images
-from config import (BACKFILL_LIMIT, IMAGE_MAX_WIDTH, MEDIA_DIR, TG_API_HASH, TG_API_ID, TG_CHANNELS,
+from image_store import store as image_store
+from config import (BACKFILL_LIMIT, IMAGE_MAX_WIDTH, TG_API_HASH, TG_API_ID, TG_CHANNELS,
                     TG_SESSION, TG_SESSION_STRING)
 from offer_parser import parse_offer, store_for_url
 
@@ -120,15 +121,15 @@ async def handle_message(message, channel_title: str, on_saved=None) -> None:
     source_key = f"tg:{message.chat_id}:{message.id}"
     image = None
     if _has_image(message):
-        path = MEDIA_DIR / f"tg_{abs(message.chat_id)}_{message.id}.jpg"
-        if not path.exists():
+        name = f"tg_{abs(message.chat_id)}_{message.id}.jpg"
+        existing = db.get_offer(source_key)
+        image = (existing or {}).get("image") or image_store.exists(name)
+        if not image:
             try:
                 data = await message.download_media(file=bytes)
-                path.write_bytes(_shrink(data))
+                image = await image_store.save(name, _shrink(data))
             except Exception as exc:  # media can be gone or restricted; the deal is still useful
-                log.warning("image download failed for %s: %s", source_key, exc)
-        if path.exists():
-            image = f"/media/{path.name}"
+                log.warning("image failed for %s: %s", source_key, exc)
 
     posted_at = int(message.date.timestamp())
     if db.upsert_offer(source_key, channel_title, offer, posted_at, image):
@@ -151,22 +152,21 @@ async def enrich_from_link(source_key: str, links: list[dict], need_image: bool,
     """Fills in what a post lacks from the product behind its link: the picture for a deal
     without a photo, the product name for a title that is only a price. Misses are recorded so
     they aren't retried every run. Returns True when an image was found."""
-    image_path, title = None, None
+    image, title = None, None
     for link in links[:2]:
-        data, found_title = await product_images.lookup(link["url"], want_image=need_image and not image_path,
+        data, found_title = await product_images.lookup(link["url"], want_image=need_image and not image,
                                                          want_title=need_title and not title)
         title = title or found_title
-        if data and not image_path:
+        if data and not image:
             try:
-                path = MEDIA_DIR / f"{source_key.replace(':', '_').replace('-', '')}.jpg"
-                path.write_bytes(_shrink(data))
-                image_path = f"/media/{path.name}"
-            except Exception as exc:  # not a decodable image after all
-                log.info("bad product image for %s: %s", source_key, exc)
-        if (image_path or not need_image) and (title or not need_title):
+                name = f"{source_key.replace(':', '_').replace('-', '')}.jpg"
+                image = await image_store.save(name, _shrink(data))
+            except Exception as exc:  # not a decodable image, or the upload failed
+                log.info("product image failed for %s: %s", source_key, exc)
+        if (image or not need_image) and (title or not need_title):
             break
-    db.save_lookup(source_key, (image_path or "") if need_image else None, title)
-    return image_path is not None
+    db.save_lookup(source_key, (image or "") if need_image else None, title)
+    return image is not None
 
 
 async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:

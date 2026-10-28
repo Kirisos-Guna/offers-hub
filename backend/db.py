@@ -107,6 +107,38 @@ def delete_offers(source_keys: list[str]) -> None:
         _conn.commit()
 
 
+def expired_images() -> list[str]:
+    """Images of the deals the next purge_old() removes (to delete them from the image store)."""
+    cutoff = int(time.time()) - KEEP_DAYS * 86400
+    with _lock:
+        return [r[0] for r in _conn.execute(
+            "SELECT image FROM offers WHERE posted_at < ? AND image IS NOT NULL AND image != ''", (cutoff,))]
+
+
+def restore_offer(doc: dict, doc_hash: str) -> None:
+    """Re-creates a deal from its Firestore document (see firebase_publisher.py), marked as
+    already published and announced."""
+    with _lock:
+        _conn.execute(
+            """INSERT OR REPLACE INTO offers (source_key, dedupe_key, source, title, tag, store, price, mrp,
+                   discount, image, url, links, text, posted_at, weak_title)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (doc["key"], doc.get("dedupe") or "", doc["source"], doc["title"], doc.get("tag"), doc["store"],
+             doc.get("price"), doc.get("mrp"), doc.get("discount"), doc.get("raw_image"), doc["url"],
+             json.dumps(doc.get("links") or []), doc.get("text") or "", doc["posted_at"], doc.get("weak") or 0),
+        )
+        _conn.execute(
+            "INSERT OR REPLACE INTO published (source_key, hash, image_blob, notified) VALUES (?, ?, NULL, 1)",
+            (doc["key"], doc_hash),
+        )
+        _conn.commit()
+
+
+def all_channels() -> list[dict]:
+    with _lock:
+        return [dict(r) for r in _conn.execute("SELECT * FROM channels")]
+
+
 def purge_old() -> int:
     cutoff = int(time.time()) - KEEP_DAYS * 86400
     with _lock:
@@ -118,7 +150,6 @@ def purge_old() -> int:
 def _row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["links"] = json.loads(d["links"])
-    d.pop("dedupe_key", None)
     return d
 
 
@@ -154,6 +185,7 @@ def _public(row: sqlite3.Row) -> dict:
     """What the app sees: no internal bookkeeping columns."""
     d = _row_to_dict(row)
     d.pop("weak_title", None)
+    d.pop("dedupe_key", None)
     return d
 
 

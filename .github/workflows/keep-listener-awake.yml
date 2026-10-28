@@ -1,0 +1,16 @@
+# Free Hugging Face Spaces sleep after ~48 hours without visits. One request every 6 hours
+# keeps the listener running; it also shows in the Actions log if the listener is down.
+name: Keep listener awake
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Visit the listener's status page
+        run: curl --fail --silent --show-error --max-time 60 --retry 3 --retry-delay 20 https://kirisos-guna-offers-hub-listener.hf.space/

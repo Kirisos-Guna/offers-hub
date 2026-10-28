@@ -55,7 +55,8 @@ class FirestoreFeed : FeedSource {
     }
 
     private companion object {
-        const val LIMIT = 400L
+        // Every app start reads these documents; the free Spark plan allows 50,000 reads a day.
+        const val LIMIT = 200L
     }
 }
 

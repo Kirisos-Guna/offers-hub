@@ -14,48 +14,47 @@ from firebase_publisher import Publisher, doc_id  # noqa: E402
 from offer_parser import parse_offer  # noqa: E402
 
 
+class FakeSnap:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return dict(self._data) if self._data is not None else None
+
+
 class FakeDoc:
-    def __init__(self, store, key):
-        self.store, self.key = store, key
+    def __init__(self, coll, key):
+        self.coll, self.key = coll, key
 
     def set(self, data):
-        self.store.writes.append(self.key)
-        self.store.docs[self.key] = data
+        self.coll.writes.append(self.key)
+        self.coll.docs[self.key] = dict(data)
+
+    def get(self):
+        return FakeSnap(self.coll.docs.get(self.key))
 
     def delete(self):
-        self.store.docs.pop(self.key, None)
+        self.coll.docs.pop(self.key, None)
 
 
-class FakeFirestore:
+class FakeCollection:
     def __init__(self):
         self.docs, self.writes = {}, []
-
-    def collection(self, _):
-        return self
 
     def document(self, key):
         return FakeDoc(self, key)
 
-
-class FakeBlob:
-    def __init__(self, bucket, name):
-        self.bucket, self.name, self.metadata, self.cache_control = bucket, name, None, None
-
-    def upload_from_filename(self, path, content_type):
-        self.bucket.files.add(self.name)
-
-    def delete(self):
-        self.bucket.files.discard(self.name)
+    def stream(self):
+        return [FakeSnap(d) for d in self.docs.values()]
 
 
-class FakeBucket:
-    name = "demo.firebasestorage.app"
-
+class FakeFirestore:
     def __init__(self):
-        self.files = set()
+        self.collections = {}
 
-    def blob(self, name):
-        return FakeBlob(self, name)
+    def collection(self, name):
+        return self.collections.setdefault(name, FakeCollection())
 
 
 class FakeMessaging:
@@ -77,31 +76,48 @@ def save(key, text, posted_at, image=None):
 
 
 async def main():
-    fs, bucket, msg = FakeFirestore(), FakeBucket(), FakeMessaging()
-    pub = Publisher(fs, bucket, msg)
+    fs, msg = FakeFirestore(), FakeMessaging()
+    pub = Publisher(fs, msg)
+    offers = fs.collection("offers")
     now = int(time.time())
-    (tmp / "media").mkdir(exist_ok=True)
-    (tmp / "media" / "tg_1_1.jpg").write_bytes(b"jpg")
+    image = "https://res.cloudinary.com/demo/image/upload/v1/offershub/tg_1_1.jpg"
 
-    save("tg:-1:1", "GRAB : Philips Cooktop at 2,997. https://amzn.to/a", now, "/media/tg_1_1.jpg")
+    save("tg:-1:1", "GRAB : Philips Cooktop at 2,997. https://amzn.to/a", now, image)
     await pub.publish("tg:-1:1", notify=False)   # first save, lookups pending
     await pub.publish("tg:-1:1", notify=True)    # final
     await pub.publish("tg:-1:1", notify=True)    # e.g. an edit with no change
-    doc = fs.docs[doc_id("tg:-1:1")]
-    assert doc["title"] == "Philips Cooktop" and doc["price"] == 2997
-    assert doc["image"].startswith("https://firebasestorage.googleapis.com/v0/b/demo.firebasestorage.app/o/media%2Ftg_1_1.jpg")
-    assert fs.writes.count(doc_id("tg:-1:1")) == 1, "unchanged deal must not be rewritten"
+    doc = offers.docs[doc_id("tg:-1:1")]
+    assert doc["title"] == "Philips Cooktop" and doc["price"] == 2997 and doc["image"] == image
+    assert offers.writes.count(doc_id("tg:-1:1")) == 1, "unchanged deal must not be rewritten"
     assert len(msg.sent) == 1 and msg.sent[0]["data"]["price"] == "2997", "exactly one notification"
-    assert "media/tg_1_1.jpg" in bucket.files
 
-    save("tg:-1:2", "Loot : Old deal @99 https://fkrt.it/b", now - 3600)
+    save("tg:-1:2", "Loot : Old deal @99 https://fkrt.it/b", now - 3600, "/media/local.jpg")
     await pub.publish("tg:-1:2", notify=True)
     assert len(msg.sent) == 1, "deals older than 15 minutes are not announced"
+    assert offers.docs[doc_id("tg:-1:2")]["image"] is None, "local paths are not public links"
+
+    db.save_channel("https://t.me/+abc", -1, "Offerzone", 42)
+    await pub.full_sync()
+    assert fs.collection("state").docs["channels"]["channels"]["https://t.me/+abc"]["last_id"] == 42
+
+    # A restart on a wiped disk: rebuild from Firestore, nothing is announced again.
+    db.delete_offers(["tg:-1:1", "tg:-1:2"])
+    for key in list(db.published_state()):
+        db.forget_published(key)
+    db._conn.execute("DELETE FROM channels")
+    db._conn.commit()
+    await pub.restore_if_empty()
+    assert db.get_offer("tg:-1:1")["title"] == "Philips Cooktop"
+    assert db.get_channel("https://t.me/+abc")["last_id"] == 42
+    writes_before = len(offers.writes)
+    await pub.full_sync()
+    assert len(offers.writes) == writes_before, "restored deals must not be rewritten"
+    await pub.publish("tg:-1:1", notify=True)
+    assert len(msg.sent) == 1, "restored deals must not be announced again"
 
     db.delete_offers(["tg:-1:1"])
     await pub.full_sync()
-    assert doc_id("tg:-1:1") not in fs.docs and "media/tg_1_1.jpg" not in bucket.files
-    assert doc_id("tg:-1:2") in fs.docs
+    assert doc_id("tg:-1:1") not in offers.docs and doc_id("tg:-1:2") in offers.docs
     print("ok publisher")
 
 
