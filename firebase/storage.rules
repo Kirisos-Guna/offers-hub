@@ -1,0 +1,10 @@
+rules_version = '2';
+// Deal images are fetched with download-token URLs, which work without any read rule.
+// Nothing else may read or write the bucket from clients.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

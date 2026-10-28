@@ -38,6 +38,13 @@ _conn.executescript(
         title    TEXT NOT NULL,
         last_id  INTEGER NOT NULL DEFAULT 0
     );
+    -- What the live listener has pushed to Firebase (see firebase_publisher.py).
+    CREATE TABLE IF NOT EXISTS published (
+        source_key  TEXT PRIMARY KEY,
+        hash        TEXT NOT NULL,          -- of the document as last written
+        image_blob  TEXT,                   -- Storage object holding the deal's image
+        notified    INTEGER NOT NULL DEFAULT 0
+    );
     """
 )
 
@@ -186,6 +193,50 @@ def mark_weak_titles(is_weak, placeholder) -> int:
         _conn.executemany("UPDATE offers SET title = ?, weak_title = 1 WHERE source_key = ?", weak)
         _conn.commit()
     return len(weak)
+
+
+def get_offer(source_key: str) -> dict | None:
+    with _lock:
+        row = _conn.execute("SELECT * FROM offers WHERE source_key = ?", (source_key,)).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def all_offer_rows() -> list[dict]:
+    with _lock:
+        rows = _conn.execute(f"SELECT * FROM offers ORDER BY {SORTS['latest']}").fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def published_state() -> dict[str, dict]:
+    with _lock:
+        return {r["source_key"]: dict(r) for r in _conn.execute("SELECT * FROM published")}
+
+
+def set_published(source_key: str, doc_hash: str, image_blob: str | None) -> None:
+    with _lock:
+        _conn.execute(
+            """INSERT INTO published (source_key, hash, image_blob) VALUES (?, ?, ?)
+               ON CONFLICT(source_key) DO UPDATE SET hash = excluded.hash,
+                   image_blob = COALESCE(excluded.image_blob, published.image_blob)""",
+            (source_key, doc_hash, image_blob),
+        )
+        _conn.commit()
+
+
+def mark_notified(source_key: str) -> bool:
+    """True the first time it's called for a deal (so each deal is announced once)."""
+    with _lock:
+        cur = _conn.execute(
+            "UPDATE published SET notified = 1 WHERE source_key = ? AND notified = 0", (source_key,)
+        )
+        _conn.commit()
+        return cur.rowcount == 1
+
+
+def forget_published(source_key: str) -> None:
+    with _lock:
+        _conn.execute("DELETE FROM published WHERE source_key = ?", (source_key,))
+        _conn.commit()
 
 
 def get_channel(link: str) -> dict | None:

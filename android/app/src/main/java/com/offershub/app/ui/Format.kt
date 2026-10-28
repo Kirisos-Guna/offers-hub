@@ -16,17 +16,23 @@ private val rupees = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-
 
 fun formatPrice(value: Double): String = rupees.format(value)
 
-/** The post's prefix ("GRAB", "Loot"), unless it's just the discount the badge already shows. */
-val Offer.displayTag: String?
-    get() = tag?.takeUnless { it.contains('%') }
-
-fun timeAgo(epochSeconds: Long): String =
-    DateUtils.getRelativeTimeSpanString(
+fun timeAgo(epochSeconds: Long): String {
+    val ageMs = System.currentTimeMillis() - epochSeconds * 1000
+    if (ageMs < DateUtils.MINUTE_IN_MILLIS) return "Just now"
+    return DateUtils.getRelativeTimeSpanString(
         epochSeconds * 1000, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
         DateUtils.FORMAT_ABBREV_RELATIVE,
     ).toString()
+}
 
-/** Opens the deal; Android hands amazon/flipkart links to the shop's app when it's installed. */
+/** Posted in the last 15 minutes. */
+fun Offer.isNew(): Boolean = System.currentTimeMillis() / 1000 - postedAt < 15 * 60
+
+/** The post's prefix ("GRAB", "Loot"), unless it's just the discount the badge already shows. */
+val Offer.displayTag: String?
+    get() = tag?.takeIf { t -> t.any { it.isLetter() } && !t.contains('%') }
+
+/** Opens the deal; Android hands Amazon/Flipkart links to the shop's app when it's installed. */
 fun openLink(context: Context, url: String) {
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

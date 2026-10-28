@@ -3,6 +3,7 @@
     python login.py           saves the session to backend/offers.session (for server.py)
     python login.py --string  prints a session string for the TG_SESSION_STRING GitHub secret
     python login.py --github  stores that string straight into the repo secret (needs the gh CLI)
+    python login.py --env     stores that string in backend/.env (used by listener.py on the VM)
 
 Keep the session file and string private: they give access to your Telegram account.
 """
@@ -21,7 +22,8 @@ async def main() -> None:
     if not TG_API_ID or not TG_API_HASH:
         raise SystemExit("Fill TG_API_ID and TG_API_HASH in backend/.env first (see .env.example).")
     to_github = "--github" in sys.argv
-    as_string = to_github or "--string" in sys.argv
+    to_env = "--env" in sys.argv
+    as_string = to_github or to_env or "--string" in sys.argv
     client = TelegramClient(StringSession(), TG_API_ID, TG_API_HASH) if as_string else make_client()
     await client.start()  # prompts for phone, code and 2FA password in this terminal
     me = await client.get_me()
@@ -30,6 +32,14 @@ async def main() -> None:
         subprocess.run(["gh", "secret", "set", "TG_SESSION_STRING"], input=client.session.save(),
                        text=True, check=True, cwd=BASE_DIR.parent)
         print("Saved to the TG_SESSION_STRING secret of the GitHub repo.")
+    elif to_env:
+        env = BASE_DIR / ".env"
+        lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+        lines = [l for l in lines if not l.startswith("TG_SESSION_STRING=")]
+        lines.append(f"TG_SESSION_STRING={client.session.save()}")
+        env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        env.chmod(0o600)
+        print(f"Saved to {env}.")
     elif as_string:
         print("\nTG_SESSION_STRING (copy into the GitHub secret, never share it):\n")
         print(client.session.save())

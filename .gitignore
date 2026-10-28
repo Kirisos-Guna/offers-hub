@@ -11,3 +11,7 @@ android/app/build/
 android/local.properties
 *.apk
 .idea/
+keystore/
+android/keystore.properties
+*.jks
+android/app/google-services.json

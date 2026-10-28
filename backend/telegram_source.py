@@ -104,7 +104,9 @@ def _has_image(message) -> bool:
     )
 
 
-async def handle_message(message, channel_title: str) -> None:
+async def handle_message(message, channel_title: str, on_saved=None) -> None:
+    """Saves the deal in a post. on_saved(source_key, final) is awaited right after saving
+    (final=False) and again once the link lookups are done (final=True)."""
     if not message or not message.message:
         return
     offer = parse_offer(message.message, _extra_urls(message))
@@ -131,9 +133,14 @@ async def handle_message(message, channel_title: str) -> None:
     posted_at = int(message.date.timestamp())
     if db.upsert_offer(source_key, channel_title, offer, posted_at, image):
         log.info("[%s] %s | %s | %s", channel_title, offer["store"], offer["price"], offer["title"][:60])
-        if image is None or offer["weak_title"]:
+        needs_lookup = image is None or offer["weak_title"]
+        if on_saved and needs_lookup:
+            await on_saved(source_key, False)  # show it now; the lookup can take a few seconds
+        if needs_lookup:
             await enrich_from_link(source_key, offer["links"], need_image=image is None,
                                    need_title=offer["weak_title"])
+        if on_saved:
+            await on_saved(source_key, True)
 
 
 def placeholder_title(store: str) -> str:
@@ -194,7 +201,7 @@ async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:
     return opened
 
 
-async def sync_channel(client: TelegramClient, link: str, chat) -> int:
+async def sync_channel(client: TelegramClient, link: str, chat, on_saved=None) -> int:
     """Imports posts newer than the last sync (or the latest BACKFILL_LIMIT on the first run)."""
     last_id = (db.get_channel(link) or {}).get("last_id", 0)
     newest, count = last_id, 0
@@ -202,10 +209,11 @@ async def sync_channel(client: TelegramClient, link: str, chat) -> int:
     async for message in client.iter_messages(chat, **kwargs):
         newest = max(newest, message.id)
         if not db.has_offer(f"tg:{message.chat_id}:{message.id}"):
-            await handle_message(message, chat.title)
+            await handle_message(message, chat.title, on_saved)
         count += 1
     db.save_channel(link, utils.get_peer_id(chat), chat.title, newest)
-    log.info("synced %d new messages from %s", count, chat.title)
+    if count:
+        log.info("synced %d new messages from %s", count, chat.title)
     return count
 
 

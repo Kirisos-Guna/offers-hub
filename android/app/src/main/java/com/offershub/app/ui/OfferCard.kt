@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,57 +29,74 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import com.offershub.app.data.Offer
+import com.offershub.app.ui.theme.DealRed
+import com.offershub.app.ui.theme.LiveGreen
 import com.offershub.app.ui.theme.storeColor
 
 @Composable
-fun OfferCard(offer: Offer, imageUrl: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    ElevatedCard(onClick = onClick, modifier = modifier) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            OfferImage(offer, imageUrl, Modifier.fillMaxSize())
-            offer.discount?.let {
-                DiscountBadge(it, Modifier.align(Alignment.TopStart).padding(8.dp))
+fun OfferCard(offer: Offer, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
+        modifier = modifier,
+    ) {
+        Column {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .padding(6.dp)
+                    .clip(MaterialTheme.shapes.medium)
+            ) {
+                OfferImage(offer, Modifier.fillMaxSize())
+                Row(
+                    Modifier.fillMaxWidth().padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    offer.discount?.let { DiscountBadge(it) } ?: Spacer(Modifier)
+                    if (offer.isNew()) Pill("NEW", LiveGreen, Color.White)
+                }
+                if (offer.image != null && offer.store != "Other") {
+                    StoreBadge(offer.store, Modifier.align(Alignment.BottomStart).padding(8.dp))
+                }
             }
-            // The placeholder already shows the store name; "Other" says nothing worth a badge.
-            if (imageUrl != null && offer.store != "Other") {
-                StoreBadge(offer.store, Modifier.align(Alignment.BottomStart).padding(8.dp))
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp)) {
+                Text(
+                    offer.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    minLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                PriceRow(offer, Modifier.padding(top = 6.dp))
+                Text(
+                    listOfNotNull(offer.displayTag, timeAgo(offer.postedAt)).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
-        }
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                offer.title,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                minLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            PriceRow(offer, Modifier.padding(top = 6.dp))
-            Text(
-                listOfNotNull(offer.displayTag, timeAgo(offer.postedAt)).joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
     }
 }
 
+/** Product photos are on white, so they sit on a white panel in both themes. */
 @Composable
-fun OfferImage(offer: Offer, imageUrl: String?, modifier: Modifier = Modifier) {
-    if (imageUrl == null) {
+fun OfferImage(offer: Offer, modifier: Modifier = Modifier) {
+    if (offer.image == null) {
         StorePlaceholder(offer.store, modifier)
     } else {
         SubcomposeAsyncImage(
-            model = imageUrl,
+            model = offer.image,
             contentDescription = offer.title,
-            contentScale = ContentScale.Crop,
-            modifier = modifier,
+            contentScale = ContentScale.Fit,
+            modifier = modifier.background(Color.White),
+            loading = { Box(Modifier.fillMaxSize().background(Color.White)) },
             error = { StorePlaceholder(offer.store, Modifier.fillMaxSize()) },
         )
     }
@@ -87,73 +106,79 @@ fun OfferImage(offer: Offer, imageUrl: String?, modifier: Modifier = Modifier) {
 private fun StorePlaceholder(store: String, modifier: Modifier) {
     val color = storeColor(store)
     Box(
-        modifier.background(Brush.linearGradient(listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.45f)))),
+        modifier.background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.55f)))),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             if (store == "Other") "Deal" else store,
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
             color = Color.White,
         )
     }
 }
 
 @Composable
-fun DiscountBadge(discount: Int, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.error,
-        contentColor = MaterialTheme.colorScheme.onError,
-        shape = RoundedCornerShape(8.dp),
-        modifier = modifier,
+fun Pill(text: String, container: Color, content: Color, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = content,
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
+@Composable
+fun DiscountBadge(discount: Int, modifier: Modifier = Modifier) =
+    Pill("$discount% OFF", DealRed, Color.White, modifier)
+
+@Composable
+fun StoreBadge(store: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.92f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(storeColor(store)))
         Text(
-            "$discount% OFF",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            store,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF231917),
+            modifier = Modifier.padding(start = 5.dp),
         )
     }
 }
 
 @Composable
-fun StoreBadge(store: String, modifier: Modifier = Modifier) {
-    Text(
-        store,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = Color.White,
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(storeColor(store))
-            .padding(horizontal = 7.dp, vertical = 2.dp),
-    )
-}
-
-@Composable
-fun PriceRow(offer: Offer, modifier: Modifier = Modifier) {
+fun PriceRow(offer: Offer, modifier: Modifier = Modifier, large: Boolean = false) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
         if (offer.price != null) {
             Text(
                 formatPrice(offer.price),
-                style = MaterialTheme.typography.titleMedium,
+                style = if (large) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
             )
         } else {
             Text(
                 "See deal",
-                style = MaterialTheme.typography.titleSmall,
+                style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
         if (offer.mrp != null && offer.mrp != offer.price) {
             Text(
                 formatPrice(offer.mrp),
-                style = MaterialTheme.typography.bodySmall,
+                style = if (large) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textDecoration = TextDecoration.LineThrough,
-                modifier = Modifier.padding(bottom = 2.dp),
+                modifier = Modifier.padding(bottom = if (large) 4.dp else 2.dp),
             )
         }
     }

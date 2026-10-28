@@ -1,4 +1,16 @@
 <resources>
-    <style name="Theme.OffersHub" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.OffersHub" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <!-- Shown by the splash screen API until the first frame is drawn. -->
+    <style name="Theme.OffersHub.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.OffersHub</item>
+    </style>
+
     <color name="ic_launcher_background">#E8590C</color>
+    <color name="window_background">#FFF8F6</color>
+    <color name="notification_accent">#E8590C</color>
 </resources>

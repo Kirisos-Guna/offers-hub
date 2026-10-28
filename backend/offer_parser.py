@@ -126,7 +126,8 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
     first_line = next((l.strip() for l in text.splitlines() if l.strip()), "")
     tag = None
     m = TAG_RE.match(first_line)
-    if m and not URL_RE.search(m.group(1)):
+    # "GRAB :" is a tag; "1436 :" or "₹50 :" before a link is a price label, not a tag.
+    if m and not URL_RE.search(m.group(1)) and re.search(r"[A-Za-z]", m.group(1)):
         tag = m.group(1).strip()
         first_line = first_line[m.end():]
 

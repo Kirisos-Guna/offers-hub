@@ -1,0 +1,13 @@
+rules_version = '2';
+// Deals are public to read; only the listener (Admin SDK, which bypasses rules) writes them.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Offers Hub Telegram deal listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=offershub
+WorkingDirectory=/opt/offershub/backend
+ExecStart=/opt/offershub/backend/.venv/bin/python listener.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+# Hardening: the listener only needs its own directory and the network.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/offershub/backend
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
