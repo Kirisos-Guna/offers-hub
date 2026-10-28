@@ -39,7 +39,8 @@ DEFAULT_CHANNELS = [
     "https://t.me/+FpXKV70NYNY0NzQ1",
     "https://t.me/+uV5wcTkUWJEwM2Y1",
     "https://t.me/+7rHGiXC8TnsxN2I9",
-    "https://t.me/+kTvbwlaPbH1mM2E1",  # Offerzone 3.0
+    # Offerzone 3.0's invite link (t.me/+kTvbwlaPbH1mM2E1) has expired; the account is a member.
+    "title:Offerzone 3.0",
     # Joined channels can also be named; dcloots.in itself refuses automated requests.
     "title:DC LOOTS Offers And Deals",
 ]
