@@ -36,9 +36,12 @@ class CloudinaryStore:
     FOLDER = "offershub"
 
     def __init__(self, url: str):
+        if "<" in url or "*" in url:
+            raise ValueError("CLOUDINARY_URL still has placeholder text: on the Cloudinary dashboard, reveal "
+                             "the API secret and copy the full value with your real key and secret")
         parsed = urlparse(url)
         self.cloud, self.key, self.secret = parsed.hostname, parsed.username, parsed.password
-        if not (self.cloud and self.key and self.secret):
+        if parsed.scheme != "cloudinary" or not (self.cloud and self.key and self.secret):
             raise ValueError("CLOUDINARY_URL must look like cloudinary://<key>:<secret>@<cloud>")
         self._http = httpx.AsyncClient(timeout=30)
 
@@ -80,8 +83,15 @@ class CloudinaryStore:
 
 
 def _make_store():
-    url = os.environ.get("CLOUDINARY_URL", "").strip()
-    return CloudinaryStore(url) if url else LocalStore()
+    """(store, problem): a bad CLOUDINARY_URL is reported, not raised, so the listener can show it."""
+    url = os.environ.get("CLOUDINARY_URL", "").strip().strip("\"'")
+    url = url.removeprefix("CLOUDINARY_URL=").strip().strip("\"'")  # pasted with its label
+    if not url:
+        return LocalStore(), None
+    try:
+        return CloudinaryStore(url), None
+    except ValueError as exc:
+        return LocalStore(), str(exc)
 
 
-store = _make_store()
+store, store_problem = _make_store()

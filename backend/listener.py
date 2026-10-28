@@ -24,7 +24,7 @@ import db
 import telegram_source
 from config import TG_API_HASH, TG_API_ID, TG_SESSION_STRING
 from firebase_publisher import Publisher
-from image_store import CloudinaryStore, store as image_store
+from image_store import CloudinaryStore, store as image_store, store_problem
 from offer_parser import is_weak_title
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -60,6 +60,8 @@ async def serve_status(port: int) -> asyncio.AbstractServer:
 async def main() -> None:
     if not (TG_API_ID and TG_API_HASH and TG_SESSION_STRING):
         raise SystemExit("Set TG_API_ID, TG_API_HASH and TG_SESSION_STRING")
+    if store_problem:
+        raise SystemExit(store_problem)
     if not isinstance(image_store, CloudinaryStore):
         raise SystemExit("Set CLOUDINARY_URL: the listener's own disk doesn't keep images")
     publisher = Publisher.from_environment()
