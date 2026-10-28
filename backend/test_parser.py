@@ -76,6 +76,13 @@ def test_invisible_characters_dont_hide_the_price():
     assert parse_offer("Axe Deos Starts at ‎75. https://link.amazon/B0x")["price"] == 75
 
 
+def test_sizes_at_line_start_are_not_prices():
+    o = parse_offer("Upto 60% Off On Water Heater\n\nUpto 5L Geyser : https://amzn.to/a\n"
+                    "5 - 10L Geyser : https://amzn.to/b\n10 - 20L Geyser : https://amzn.to/c")
+    assert o["price"] is None and o["discount"] == 60
+    assert parse_offer("336 https://amzn.to/x\n299 https://amzn.to/y")["price"] == 336
+
+
 def test_named_product_is_not_weak():
     assert not parse_offer("Yellow Hat at 449.\n\nhttps://amzn.to/4BmgyrR")["weak_title"]
 
