@@ -8,6 +8,8 @@ Typical posts:
 import re
 from urllib.parse import urlparse
 
+from categories import categorize
+
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
 
 # Domain suffix -> store name. Checked against the link host.
@@ -63,6 +65,14 @@ DISCOUNT_RE = re.compile(r"(\d{1,2})\s*%\s*off", re.IGNORECASE)
 TAG_RE = re.compile(r"^\s*([^:\n]{2,24}?)\s*:\s+(?!//)")
 TITLE_TAIL_RE = re.compile(
     r"\s*(?:\bstarts?\s*(?:at|@|from)?|\bat\b|@|₹|\brs\.?)\s*₹?\s*[\d,]+(?:\.\d+)?(?![\d,]*\s*off\b).*$",
+    re.IGNORECASE,
+)
+
+
+# Channels edit a post when the deal is gone: "Edit - Over Now ❌", "Expired", "Sold out".
+EXPIRED_RE = re.compile(
+    r"\b(?:over\s*now|deal\s*(?:is\s*)?over|loot\s*(?:is\s*)?over|offer\s*(?:is\s*)?over|expired|sold\s*out|"
+    r"out\s*of\s*stock|no\s*longer\s*(?:available|live)|price\s*(?:has\s*)?increased|not\s*working)\b|❌",
     re.IGNORECASE,
 )
 
@@ -188,6 +198,8 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
     return {
         "title": title[:200],
         "weak_title": weak,
+        "category": categorize(title if not weak else "", text),
+        "expired": bool(EXPIRED_RE.search(text)),
         "tag": tag,
         "store": store,
         "price": price,

@@ -76,6 +76,8 @@ class Publisher:
             "links": row["links"],
             "text": row["text"],
             "posted_at": row["posted_at"],
+            "category": row.get("category") or "Other",
+            "expired": bool(row.get("expired")),
             # Listener bookkeeping, used to rebuild its database after a restart.
             "key": row["source_key"],
             "dedupe": row["dedupe_key"],
@@ -93,12 +95,14 @@ class Publisher:
         return doc, True
 
     def _notify(self, key: str, doc: dict) -> None:
-        if time.time() - doc["posted_at"] > NOTIFY_WITHIN_SECONDS or not db.mark_notified(key):
+        if doc["expired"] or time.time() - doc["posted_at"] > NOTIFY_WITHIN_SECONDS or not db.mark_notified(key):
             return
         data = {
             "id": doc_id(key),
             "title": doc["title"],
             "store": doc["store"],
+            "category": doc["category"],
+            "text": doc["text"][:500],  # lets phones match the user's alert keywords
             "price": "" if doc["price"] is None else f"{doc['price']:g}",
             "mrp": "" if doc["mrp"] is None else f"{doc['mrp']:g}",
             "discount": "" if doc["discount"] is None else str(doc["discount"]),

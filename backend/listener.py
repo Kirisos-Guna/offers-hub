@@ -36,8 +36,21 @@ RETRY_CHANNELS_ROUNDS = 10  # channels that couldn't be opened are retried every
 HOUSEKEEPING_SECONDS = 3600
 LOOKUP_BACKLOG = 400
 
-status = {"state": "starting", "started_at": int(time.time()), "last_deal_at": None, "channels": 0,
-          "error": None}
+STALE_AFTER_SECONDS = 6 * 3600
+
+status = {"state": "starting", "started_at": int(time.time()), "live_since": None, "last_deal_at": None,
+          "channels": 0, "error": None}
+
+
+def is_healthy() -> bool:
+    """False when the listener is failing, or live but has seen no deal for STALE_AFTER_SECONDS
+    (the channels post all day, so a long silence means it is stuck)."""
+    if status["state"] in ("error", "reconnecting"):
+        return False
+    if status["state"] != "live":
+        return True  # starting or catching up
+    last = max(status["last_deal_at"] or 0, status["live_since"] or 0)
+    return time.time() - last < STALE_AFTER_SECONDS
 
 
 async def serve_status(port: int) -> asyncio.AbstractServer:
@@ -47,8 +60,11 @@ async def serve_status(port: int) -> asyncio.AbstractServer:
             await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
         except Exception:
             pass
-        body = json.dumps({**status, "deals": len(db.all_offer_rows())}).encode()
-        writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n"
+        healthy = is_healthy()
+        body = json.dumps({**status, "healthy": healthy, "deals": len(db.all_offer_rows())}).encode()
+        # 503 makes the pinger email you and Render restart the service.
+        head = b"HTTP/1.1 200 OK\r\n" if healthy else b"HTTP/1.1 503 Service Unavailable\r\n"
+        writer.write(head + b"Content-Type: application/json\r\nCache-Control: no-store\r\n"
                      + f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode() + body)
         try:
             await writer.drain()
@@ -122,7 +138,7 @@ async def main() -> None:
         await publisher.save_channels()  # a restart mid-catch-up resumes from here
     db.mark_weak_titles(is_weak_title, telegram_source.placeholder_title)
     await publisher.full_sync()
-    status["state"] = "live"
+    status["state"], status["live_since"] = "live", int(time.time())
     log.info("live: listening for new deals")
 
     async def safety_poll():

@@ -4,6 +4,7 @@ import sqlite3
 import threading
 import time
 
+from categories import categorize
 from config import DB_PATH, KEEP_DAYS
 from offer_parser import dedupe_key
 
@@ -48,10 +49,19 @@ _conn.executescript(
     """
 )
 
-# 1 = title is only a price/promo word and still needs a product name, 2 = name lookup done.
-if "weak_title" not in {r[1] for r in _conn.execute("PRAGMA table_info(offers)")}:
-    _conn.execute("ALTER TABLE offers ADD COLUMN weak_title INTEGER NOT NULL DEFAULT 0")
-    _conn.commit()
+# Columns added after the first release.
+_COLUMNS = {
+    # 1 = title is only a price/promo word and still needs a product name, 2 = name lookup done.
+    "weak_title": "INTEGER NOT NULL DEFAULT 0",
+    "category": "TEXT NOT NULL DEFAULT 'Other'",
+    # The channel edited the post to say the deal is over.
+    "expired": "INTEGER NOT NULL DEFAULT 0",
+}
+_existing = {r[1] for r in _conn.execute("PRAGMA table_info(offers)")}
+for _name, _type in _COLUMNS.items():
+    if _name not in _existing:
+        _conn.execute(f"ALTER TABLE offers ADD COLUMN {_name} {_type}")
+_conn.commit()
 
 SORTS = {
     "latest": "posted_at DESC, id DESC",
@@ -75,10 +85,12 @@ def upsert_offer(source_key: str, source: str, offer: dict, posted_at: int, imag
         _conn.execute(
             """
             INSERT INTO offers (source_key, dedupe_key, source, title, tag, store, price, mrp, discount,
-                                image, url, links, text, posted_at, weak_title)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                image, url, links, text, posted_at, weak_title, category, expired)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_key) DO UPDATE SET
-                dedupe_key = excluded.dedupe_key, tag = excluded.tag,
+                dedupe_key = excluded.dedupe_key, tag = excluded.tag, expired = excluded.expired,
+                category = CASE WHEN excluded.weak_title = 1 AND offers.weak_title = 2
+                                THEN offers.category ELSE excluded.category END,
                 -- an edited post keeps a product name found earlier for its vague title
                 title = CASE WHEN excluded.weak_title = 1 AND offers.weak_title = 2
                              THEN offers.title ELSE excluded.title END,
@@ -90,7 +102,8 @@ def upsert_offer(source_key: str, source: str, offer: dict, posted_at: int, imag
             """,
             (source_key, key, source, offer["title"], offer.get("tag"), offer["store"], offer.get("price"),
              offer.get("mrp"), offer.get("discount"), image, offer["url"], json.dumps(offer["links"]),
-             offer["text"], posted_at, int(offer.get("weak_title", False))),
+             offer["text"], posted_at, int(offer.get("weak_title", False)), offer.get("category", "Other"),
+             int(offer.get("expired", False))),
         )
         _conn.commit()
     return True
@@ -121,11 +134,12 @@ def restore_offer(doc: dict, doc_hash: str) -> None:
     with _lock:
         _conn.execute(
             """INSERT OR REPLACE INTO offers (source_key, dedupe_key, source, title, tag, store, price, mrp,
-                   discount, image, url, links, text, posted_at, weak_title)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   discount, image, url, links, text, posted_at, weak_title, category, expired)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (doc["key"], doc.get("dedupe") or "", doc["source"], doc["title"], doc.get("tag"), doc["store"],
              doc.get("price"), doc.get("mrp"), doc.get("discount"), doc.get("raw_image"), doc["url"],
-             json.dumps(doc.get("links") or []), doc.get("text") or "", doc["posted_at"], doc.get("weak") or 0),
+             json.dumps(doc.get("links") or []), doc.get("text") or "", doc["posted_at"], doc.get("weak") or 0,
+             doc.get("category") or "Other", int(bool(doc.get("expired")))),
         )
         _conn.execute(
             "INSERT OR REPLACE INTO published (source_key, hash, image_blob, notified) VALUES (?, ?, NULL, 1)",
@@ -144,11 +158,16 @@ def reparse_all(parse) -> int:
             offer = parse(row["text"])
             if offer is None:
                 continue
-            title = row["title"] if row["weak_title"] == 2 and offer["weak_title"] else offer["title"]
-            new = (title, offer["tag"], offer["price"], offer["mrp"], offer["discount"])
-            if new != (row["title"], row["tag"], row["price"], row["mrp"], row["discount"]):
+            kept_name = row["weak_title"] == 2 and offer["weak_title"]
+            title = row["title"] if kept_name else offer["title"]
+            category = categorize(title, row["text"]) if kept_name else offer["category"]
+            new = (title, offer["tag"], offer["price"], offer["mrp"], offer["discount"], category,
+                   int(offer["expired"]))
+            if new != (row["title"], row["tag"], row["price"], row["mrp"], row["discount"], row["category"],
+                       row["expired"]):
                 _conn.execute(
-                    "UPDATE offers SET title = ?, tag = ?, price = ?, mrp = ?, discount = ? WHERE id = ?",
+                    """UPDATE offers SET title = ?, tag = ?, price = ?, mrp = ?, discount = ?, category = ?,
+                       expired = ? WHERE id = ?""",
                     (*new, row["id"]),
                 )
                 changed += 1
@@ -232,10 +251,12 @@ def save_lookup(source_key: str, image: str | None, title: str | None) -> None:
     with _lock:
         if image is not None:
             _conn.execute("UPDATE offers SET image = ? WHERE source_key = ?", (image, source_key))
-        _conn.execute(
-            "UPDATE offers SET title = COALESCE(?, title), weak_title = 2 WHERE source_key = ? AND weak_title = 1",
-            (title, source_key),
-        )
+        row = _conn.execute("SELECT weak_title, text FROM offers WHERE source_key = ?", (source_key,)).fetchone()
+        if row and row["weak_title"] == 1:
+            _conn.execute(
+                "UPDATE offers SET title = COALESCE(?, title), weak_title = 2, category = ? WHERE source_key = ?",
+                (title, categorize(title, row["text"]) if title else categorize("", row["text"]), source_key),
+            )
         _conn.commit()
 
 

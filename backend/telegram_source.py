@@ -13,6 +13,7 @@ from PIL import Image
 from telethon import TelegramClient, errors, events, functions, types, utils
 from telethon.sessions import StringSession
 
+import affiliate
 import db
 import product_images
 from image_store import store as image_store
@@ -117,6 +118,10 @@ async def handle_message(message, channel_title: str, on_saved=None) -> None:
         offer["store"] = await _store_from_redirect(offer["url"]) or "Other"
         if offer["weak_title"] and offer["store"] != "Other":
             offer["title"] = placeholder_title(offer["store"])
+
+    if affiliate.ENABLED:
+        offer["links"] = await affiliate.retag_links(offer["links"])
+        offer["url"] = offer["links"][0]["url"]
 
     source_key = f"tg:{message.chat_id}:{message.id}"
     image = None

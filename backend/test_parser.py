@@ -83,6 +83,24 @@ def test_sizes_at_line_start_are_not_prices():
     assert parse_offer("336 https://amzn.to/x\n299 https://amzn.to/y")["price"] == 336
 
 
+def test_categories():
+    from categories import categorize
+    assert parse_offer("GRAB : Philips Viva Induction Cooktop at 2,997. https://amzn.to/a")["category"] == "Home & Kitchen"
+    assert categorize("boAt Airdopes 141 TWS Earbuds") == "Electronics"
+    assert categorize("Fastrack Smartwatch") == "Electronics"
+    assert categorize("Timex Analog Watch for Women") == "Fashion"
+    assert categorize("Parachute Body Lotion 400 ml") == "Beauty & Health"
+    assert categorize("Haldiram's Premium Kaju Katli Gift Pack") == "Grocery"
+    assert categorize("Apply Lifetime Free Scapia Card") == "Cards & Offers"
+    assert categorize("Tablets 30 pcs") == "Beauty & Health"  # not "table"
+
+
+def test_expired_edits():
+    assert parse_offer("Edit - Over Now ❌\n\nBoat Earbuds at 899 https://amzn.to/a")["expired"]
+    assert parse_offer("Loot : Fan @999 (Sold Out) https://fkrt.it/x")["expired"]
+    assert not parse_offer("GRAB : Fan at 999 https://fkrt.it/x")["expired"]
+
+
 def test_named_product_is_not_weak():
     assert not parse_offer("Yellow Hat at 449.\n\nhttps://amzn.to/4BmgyrR")["weak_title"]
 
