@@ -32,6 +32,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("listener")
 
 SAFETY_POLL_SECONDS = 60
+RETRY_CHANNELS_ROUNDS = 10  # channels that couldn't be opened are retried every 10 minutes
 HOUSEKEEPING_SECONDS = 3600
 LOOKUP_BACKLOG = 400
 
@@ -79,24 +80,32 @@ async def main() -> None:
     opened = await telegram_source.open_channels(client)
     if not opened:
         raise SystemExit("No channels could be opened")
-    chats = [chat for _, chat in opened]
-    titles = {utils.get_peer_id(chat): chat.title for chat in chats}
-    status["channels"] = len(chats)
-    status["channel_names"] = sorted(titles.values())
-    status["channels_missing"] = len(TG_CHANNELS) - len(chats)
+    titles: dict[int, str] = {}
+
+    def track(newly_opened):
+        for _, chat in newly_opened:
+            titles[utils.get_peer_id(chat)] = chat.title
+        status["channels"] = len(titles)
+        status["channel_names"] = sorted(titles.values())
+        # Invite links are shortened: the status page is public.
+        status["channel_errors"] = {f"…{link[-6:]}": why for link, why in telegram_source.open_errors.items()}
+
+    track(opened)
     fixed = db.reparse_all(parse_offer)  # deals saved by an older parser
     if fixed:
         log.info("re-parsed %d saved deals", fixed)
 
-    # Register live handlers first so nothing posted during the catch-up is lost.
-    @client.on(events.NewMessage(chats=chats))
-    @client.on(events.MessageEdited(chats=chats))
+    # Registered for all chats and filtered here, so channels opened later are covered too.
+    # Registered before the catch-up so nothing posted meanwhile is lost.
+    @client.on(events.NewMessage())
+    @client.on(events.MessageEdited())
     async def on_post(event):
-        await telegram_source.handle_message(event.message, titles.get(event.chat_id, "Telegram"), on_saved)
+        if event.chat_id in titles:
+            await telegram_source.handle_message(event.message, titles[event.chat_id], on_saved)
 
-    @client.on(events.MessageDeleted(chats=chats))
+    @client.on(events.MessageDeleted())
     async def on_delete(event):
-        if not event.chat_id:
+        if event.chat_id not in titles:
             return
         keys = [f"tg:{event.chat_id}:{i}" for i in event.deleted_ids]
         for key in keys:
@@ -117,8 +126,20 @@ async def main() -> None:
     log.info("live: listening for new deals")
 
     async def safety_poll():
+        rounds = 0
         while True:
             await asyncio.sleep(SAFETY_POLL_SECONDS)
+            rounds += 1
+            failed = [link for link in TG_CHANNELS if link not in {l for l, _ in opened}]
+            if failed and rounds % RETRY_CHANNELS_ROUNDS == 0:
+                try:
+                    newly = await telegram_source.open_channels(client, failed)
+                    opened.extend(newly)
+                    track(newly)
+                    for link, chat in newly:
+                        log.info("opened %s on retry", chat.title)
+                except Exception:
+                    log.exception("retrying channels failed")
             for link, chat in opened:
                 try:
                     await telegram_source.sync_channel(client, link, chat, on_saved)

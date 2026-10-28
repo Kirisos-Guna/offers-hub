@@ -169,20 +169,26 @@ async def enrich_from_link(source_key: str, links: list[dict], need_image: bool,
     return image is not None
 
 
-async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:
-    """(link, entity) for every configured channel that could be opened."""
+# Why a configured channel couldn't be opened, by link (shown on the listener's status page).
+open_errors: dict[str, str] = {}
+
+
+async def open_channels(client: TelegramClient, links: list[str] | None = None) -> list[tuple[str, object]]:
+    """(link, entity) for every configured channel (or just `links`) that could be opened."""
     # A string session keeps no entity cache, so load the joined chats once instead of
     # re-checking every invite link (Telegram rate-limits those checks).
     dialogs = {d.id: d.entity for d in await client.get_dialogs() if d.is_channel}
     by_title = {chat.title.casefold(): chat for chat in dialogs.values()}
     opened = []
-    for link in TG_CHANNELS:
+    for link in links if links is not None else TG_CHANNELS:
+        open_errors.pop(link, None)
         known = db.get_channel(link)
         chat = dialogs.get(known["peer_id"]) if known else None
         if chat is None and link.startswith("title:"):
             # A channel the account has already joined, named instead of linked.
             chat = by_title.get(link[len("title:"):].strip().casefold())
             if chat is None:
+                open_errors[link] = "this account hasn't joined a channel with that name"
                 log.error("no joined channel is named %r", link[len("title:"):])
                 continue
             db.save_channel(link, utils.get_peer_id(chat), chat.title, 0)
@@ -190,9 +196,11 @@ async def open_channels(client: TelegramClient) -> list[tuple[str, object]]:
             try:
                 chat = await resolve_channel(client, link)
             except errors.InviteRequestSentError:
+                open_errors[link] = "join request sent; waiting for the channel admin to approve"
                 log.warning("%s needs admin approval; join request sent", link)
                 continue
             except Exception as exc:
+                open_errors[link] = f"{type(exc).__name__}: {exc}"[:200]
                 log.error("could not open %s: %s", link, exc)
                 continue
             db.save_channel(link, utils.get_peer_id(chat), chat.title, 0)
