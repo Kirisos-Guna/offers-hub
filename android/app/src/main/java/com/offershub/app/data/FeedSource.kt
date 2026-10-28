@@ -3,6 +3,7 @@ package com.offershub.app.data
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -40,7 +41,9 @@ class FirestoreFeed : FeedSource {
             .collection("offers")
             .orderBy("posted_at", Query.Direction.DESCENDING)
             .limit(LIMIT)
-            .addSnapshotListener { snapshot, error ->
+            // Metadata changes too: when the server confirms the cached deals unchanged, that is
+            // the only event that turns "Offline · saved deals" into "Live".
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 when {
                     error != null -> trySend(FeedEvent.Failed(error.message ?: "Couldn't load deals"))
                     snapshot != null -> trySend(

@@ -68,6 +68,14 @@ def test_flat_rupee_off_is_not_price():
     assert o["price"] is None and not o["weak_title"]
 
 
+def test_invisible_characters_dont_hide_the_price():
+    o = parse_offer("Godrej 600L Side by Side Refrigerator at​49,990*\n\nhttps://amzn.to/4zY1QWn\n\n"
+                    "Apply ₹4000 Coupon + ₹16,000 Off With HDFC CC")
+    assert o["title"] == "Godrej 600L Side by Side Refrigerator"
+    assert o["price"] == 49990
+    assert parse_offer("Axe Deos Starts at ‎75. https://link.amazon/B0x")["price"] == 75
+
+
 def test_named_product_is_not_weak():
     assert not parse_offer("Yellow Hat at 449.\n\nhttps://amzn.to/4BmgyrR")["weak_title"]
 

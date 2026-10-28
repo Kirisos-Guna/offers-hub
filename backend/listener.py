@@ -22,10 +22,10 @@ from telethon import events, utils
 
 import db
 import telegram_source
-from config import TG_API_HASH, TG_API_ID, TG_SESSION_STRING
+from config import TG_API_HASH, TG_API_ID, TG_CHANNELS, TG_SESSION_STRING
 from firebase_publisher import Publisher
 from image_store import CloudinaryStore, store as image_store, store_problem
-from offer_parser import is_weak_title
+from offer_parser import is_weak_title, parse_offer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -82,6 +82,11 @@ async def main() -> None:
     chats = [chat for _, chat in opened]
     titles = {utils.get_peer_id(chat): chat.title for chat in chats}
     status["channels"] = len(chats)
+    status["channel_names"] = sorted(titles.values())
+    status["channels_missing"] = len(TG_CHANNELS) - len(chats)
+    fixed = db.reparse_all(parse_offer)  # deals saved by an older parser
+    if fixed:
+        log.info("re-parsed %d saved deals", fixed)
 
     # Register live handlers first so nothing posted during the catch-up is lost.
     @client.on(events.NewMessage(chats=chats))
@@ -105,6 +110,7 @@ async def main() -> None:
     log.info("catching up on %d channels", len(opened))
     for link, chat in opened:
         await telegram_source.sync_channel(client, link, chat, on_saved)
+        await publisher.save_channels()  # a restart mid-catch-up resumes from here
     db.mark_weak_titles(is_weak_title, telegram_source.placeholder_title)
     await publisher.full_sync()
     status["state"] = "live"

@@ -116,9 +116,15 @@ def extract_links(text: str, extra_urls: list[str] | None = None) -> list[dict]:
     return links
 
 
+# Zero-width spaces, joiners, direction marks and BOMs that channels paste between words and
+# numbers ("at​49,990"); they would hide prices from the patterns above.
+INVISIBLE_RE = re.compile("[​-‏‪-‮⁠-⁤﻿]")
+
+
 def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
     """Returns None for posts without a shopping link (announcements, chatter)."""
-    text = (text or "").strip()
+    # Each one stands where a space would be ("at​49"), so it becomes one.
+    text = re.sub(r"[ \t]{2,}", " ", INVISIBLE_RE.sub(" ", text or "")).strip()
     links = extract_links(text, extra_urls)
     if not text or not links:
         return None

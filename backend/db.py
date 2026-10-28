@@ -134,6 +134,28 @@ def restore_offer(doc: dict, doc_hash: str) -> None:
         _conn.commit()
 
 
+def reparse_all(parse) -> int:
+    """Re-reads every saved post with the current parser (after a parser fix). A product name
+    already found for a vague title is kept. Returns how many deals changed."""
+    changed = 0
+    with _lock:
+        rows = _conn.execute("SELECT * FROM offers").fetchall()
+        for row in rows:
+            offer = parse(row["text"])
+            if offer is None:
+                continue
+            title = row["title"] if row["weak_title"] == 2 and offer["weak_title"] else offer["title"]
+            new = (title, offer["tag"], offer["price"], offer["mrp"], offer["discount"])
+            if new != (row["title"], row["tag"], row["price"], row["mrp"], row["discount"]):
+                _conn.execute(
+                    "UPDATE offers SET title = ?, tag = ?, price = ?, mrp = ?, discount = ? WHERE id = ?",
+                    (*new, row["id"]),
+                )
+                changed += 1
+        _conn.commit()
+    return changed
+
+
 def all_channels() -> list[dict]:
     with _lock:
         return [dict(r) for r in _conn.execute("SELECT * FROM channels")]
