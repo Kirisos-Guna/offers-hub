@@ -93,6 +93,9 @@ def test_categories():
     assert categorize("Haldiram's Premium Kaju Katli Gift Pack") == "Grocery"
     assert categorize("Apply Lifetime Free Scapia Card") == "Cards & Offers"
     assert categorize("Tablets 30 pcs") == "Beauty & Health"  # not "table"
+    assert categorize("Steelbird Air 7 Wings SBA-20 Full-Face Helmet",
+                      "Steelbird helmet\n10% off with HDFC credit card") == "Car & Bike"
+    assert categorize("Mystery box", "Extra 10% off with credit card") == "Other"  # card talk in the post
 
 
 def test_expired_edits():

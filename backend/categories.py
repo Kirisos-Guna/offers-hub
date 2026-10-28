@@ -16,6 +16,10 @@ CATEGORIES: list[tuple[str, list[str]]] = [
         "processor", "graphics card", "ram!", "trimmer", "shaver", "hair dryer", "straightener",
         "cctv", "security camera", "smart plug", "extension board", "ups", "drone", "earpods", "airpods",
     ]),
+    ("Car & Bike", [
+        "helmet", "car", "bike", "motorcycle", "scooter", "scooty", "tyre", "tire", "dashcam", "dash cam",
+        "seat cover", "engine oil", "car wash", "car perfume", "riding gloves", "number plate",
+    ]),
     ("Home & Kitchen", [
         "cooker", "pressure cooker", "mixer", "grinder", "juicer", "kitchen", "cookware", "kadai", "tawa",
         "pan", "bottle", "flask", "lunch box", "container", "bedsheet", "comforter", "pillow", "mattress",
@@ -69,9 +73,10 @@ _PATTERNS = [
 
 
 def categorize(title: str, text: str = "") -> str:
-    """The deal's category, judged from its title first and then the rest of the post."""
-    for haystack in (title.lower(), text.lower()):
+    """The deal's category, judged from its title first and then the rest of the post.
+    "Cards & Offers" counts only in the title: most posts mention a bank-card discount."""
+    for haystack, from_title in ((title.lower(), True), (text.lower(), False)):
         for name, pattern in _PATTERNS:
-            if pattern.search(haystack):
+            if (from_title or name != "Cards & Offers") and pattern.search(haystack):
                 return name
     return "Other"
