@@ -1,14 +1,14 @@
-"""Always-on deal listener (runs on a Hugging Face Space, see deploy/hf_space/).
+"""Always-on deal listener (runs on Render's free plan, see render.yaml).
 
     python listener.py
 
 Stays connected to Telegram and pushes each new deal to Firebase as it is posted:
 Firestore for the app's live feed and a Cloud Messaging notification to phones. Every minute
 it also re-reads the channels as a safety net in case an update was missed, and once an hour
-it removes expired deals. A small status page on $PORT (default 7860) keeps the host awake
-when it is pinged and shows that the listener is alive.
+it removes expired deals. A small status page on $PORT keeps the host awake when it is
+pinged and shows that the listener is alive.
 
-Settings (environment / Space secrets): TG_API_ID, TG_API_HASH, TG_SESSION_STRING,
+Settings (environment variables): TG_API_ID, TG_API_HASH, TG_SESSION_STRING,
 FIREBASE_SERVICE_ACCOUNT, CLOUDINARY_URL.
 """
 import asyncio
@@ -39,7 +39,7 @@ status = {"state": "starting", "started_at": int(time.time()), "last_deal_at": N
 
 
 async def serve_status(port: int) -> asyncio.AbstractServer:
-    """Minimal HTTP endpoint: Hugging Face needs an open port, and pings keep the Space awake."""
+    """Minimal HTTP endpoint: the host needs an open port, and pings keep the service awake."""
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
@@ -149,7 +149,7 @@ stop = asyncio.Event()
 
 
 async def run_forever() -> None:
-    """Hugging Face doesn't restart a crashed container, so the listener reconnects itself."""
+    """Reconnects by itself instead of exiting, so a dropped connection never needs a redeploy."""
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:

@@ -7,7 +7,7 @@ every new deal. Tap **Buy** to open the deal in the shop's own app.
 Everything runs on free tiers that need no card:
 
 ```
-Telegram channels ──► listener (Hugging Face Space) ──► Firebase (Spark) ──► Android app
+Telegram channels ──► listener (Render, free) ──► Firebase (Spark) ──► Android app
                       reads each post within a second   Firestore            live feed
                       finds product image + name        Cloud Messaging      instant notifications
                       uploads images ──► Cloudinary (free) ─────────────────► deal images
@@ -25,9 +25,9 @@ as a Telegram user account. Use a spare account that has joined the channels.
 | `backend/offer_parser.py`, `product_images.py` | Turn posts into deals; images/names from links |
 | `backend/firebase_publisher.py` | Writes deals to Firestore, sends notifications, keeps listener state |
 | `backend/image_store.py` | Image uploads to Cloudinary |
-| `deploy/hf_space/`, `deploy/push_hf_space.ps1` | Hugging Face Space container and deploy script |
+| `render.yaml` | Render Blueprint for the listener (free plan, Singapore) |
 | `firebase/` | Firestore security rules |
-| `.github/workflows/keep-listener-awake.yml` | Pings the Space every 6 h so it never sleeps |
+| `.github/workflows/keep-listener-awake.yml` | Backup pinger so the listener never sleeps |
 | `backend/sync_static.py`, `sync-deals.yml` | Older GitHub Pages pipeline (fallback) |
 
 ## Production setup
@@ -39,26 +39,28 @@ as a Telegram user account. Use a spare account that has joined the channels.
 2. **Project settings → Your apps → Android**: package `com.offershub.app`. Download
    `google-services.json` to `android/app/google-services.json` (git-ignored).
 3. **Project settings → Service accounts → Generate new private key**. Keep the downloaded JSON
-   private; its contents become the Space secret `FIREBASE_SERVICE_ACCOUNT`.
+   private; its contents become the Render secret `FIREBASE_SERVICE_ACCOUNT`.
 
 ### 2. Cloudinary (free, deal images)
 Sign up at <https://cloudinary.com>. On the dashboard, copy the **API environment variable**
-(`cloudinary://<key>:<secret>@<cloud>`); it becomes the Space secret `CLOUDINARY_URL`.
+(`cloudinary://<key>:<secret>@<cloud>`); it becomes the Render secret `CLOUDINARY_URL`.
 
-### 3. Hugging Face Space (free, the listener)
-1. Create a Space: name `offers-hub-listener`, SDK **Docker** (blank), hardware **CPU basic (free)**.
-2. **Settings → Variables and secrets**, add these as *secrets*:
-   `TG_API_ID`, `TG_API_HASH`, `TG_SESSION_STRING`, `FIREBASE_SERVICE_ACCOUNT`, `CLOUDINARY_URL`.
-   Create the session string with `backend\.venv\Scripts\python.exe backend\login.py --string`
-   (a fresh Telegram login just for the listener).
-3. Deploy: `hf auth login` once (write token), then `powershell -File deploy\push_hf_space.ps1`.
-   The Space builds, restores its state from Firestore, catches up, and shows
-   `{"state": "live", ...}` on its page.
-4. Once it's live, stop the GitHub sync: `gh workflow disable "Sync deals"`.
+### 3. Render (free, the listener)
+1. Create a Telegram session just for the listener:
+   `backend\.venv\Scripts\python.exe backend\login.py --string`
+2. Sign up at <https://render.com> with GitHub → **New → Blueprint** → pick this repository.
+   Render reads `render.yaml` and asks for the five secrets: `TG_API_ID`, `TG_API_HASH`,
+   `TG_SESSION_STRING`, `FIREBASE_SERVICE_ACCOUNT` (the whole key JSON), `CLOUDINARY_URL`.
+   **Apply** builds and starts it; every push to `main` redeploys it.
+3. The service's page (`https://offers-hub-listener.onrender.com/`) shows `{"state": "live", ...}`.
+4. Keep it awake: free account at <https://cron-job.org> → a job that opens that URL every
+   10 minutes. (`keep-listener-awake.yml` on GitHub is a backup.)
+5. Once it's live, stop the GitHub sync: `gh workflow disable "Sync deals"`.
 
-Free Spaces sleep after ~48 h without visits; the keep-awake workflow visits every 6 h. Spaces
-also restart now and then; the listener then reloads its state from Firestore and catches up on
-anything posted meanwhile, so no deal is missed or announced twice.
+Render stops free services after 15 minutes without visits (the pinger prevents that) and
+restarts them now and then, wiping their disk. The listener reloads its state from Firestore
+and catches up on anything posted meanwhile, so no deal is missed or announced twice; at most
+it arrives about a minute late. 750 free hours a month cover one service running 24/7.
 
 ### 3. App release
 1. Build: `cd android && gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk`.

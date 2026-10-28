@@ -5,7 +5,7 @@
 - Cloud Messaging topic `deals`: one high-priority data message per new deal, so phones can
   show a notification even when the app is closed.
 - Firestore `state/channels`: where each channel was read up to. Together with the offers
-  themselves this lets a listener whose disk was wiped (Hugging Face restarts) pick up exactly
+  themselves this lets a listener whose disk was wiped (Render restarts) pick up exactly
   where it left off, without duplicate notifications.
 
 Images are already public HTTPS links (image_store.py), so nothing is uploaded here.

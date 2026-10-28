@@ -1,0 +1,31 @@
+# Render Blueprint: the always-on Telegram listener (backend/listener.py) on the free plan.
+# Render → New → Blueprint → this repo. It asks for the secret values marked `sync: false`.
+services:
+  - type: web
+    name: offers-hub-listener
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python listener.py
+    # The listener serves a small JSON status page; Render and the pinger check it.
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: KEEP_DAYS
+        value: "7"
+      - key: BACKFILL_LIMIT
+        value: "100"
+      - key: TG_API_ID
+        sync: false
+      - key: TG_API_HASH
+        sync: false
+      - key: TG_SESSION_STRING
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false

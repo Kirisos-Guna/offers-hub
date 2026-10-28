@@ -1,10 +1,11 @@
-# Free Hugging Face Spaces sleep after ~48 hours without visits. One request every 6 hours
-# keeps the listener running; it also shows in the Actions log if the listener is down.
+# Render's free plan stops a service after 15 minutes without visits. cron-job.org is the main
+# pinger (every 10 minutes, on time); this is a backup in case it misses, and its log shows
+# whether the listener answered.
 name: Keep listener awake
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -13,4 +14,4 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Visit the listener's status page
-        run: curl --fail --silent --show-error --max-time 60 --retry 3 --retry-delay 20 https://kirisos-guna-offers-hub-listener.hf.space/
+        run: curl --fail --silent --show-error --max-time 90 --retry 3 --retry-delay 20 https://offers-hub-listener.onrender.com/
