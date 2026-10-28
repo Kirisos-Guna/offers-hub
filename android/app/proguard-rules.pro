@@ -8,6 +8,7 @@
 # Firebase finds its components by reflection.
 -keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
 
-# Readable stack traces in crash reports.
+# Readable crash reports in Crashlytics without uploading R8 mapping files: unused code is still
+# removed, but class and method names are kept.
+-dontobfuscate
 -keepattributes SourceFile,LineNumberTable
--renamesourcefileattribute SourceFile

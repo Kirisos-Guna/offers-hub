@@ -6,7 +6,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class ThemeMode(val label: String) { System("System"), Light("Light"), Dark("Dark") }
+enum class ThemeMode { System, Light, Dark }
+
+/** Which new deals produce a notification. */
+enum class AlertMode { AllDeals, KeywordsOnly }
 
 /** User preferences, observable so the UI (theme, notification filters) reacts immediately. */
 class AppSettings private constructor(context: Context) {
@@ -26,6 +29,15 @@ class AppSettings private constructor(context: Context) {
     /** Only announce deals with at least this discount (0 = every deal). */
     private val _minDiscount = MutableStateFlow(prefs.getInt(KEY_MIN_DISCOUNT, 0))
     val minDiscount: StateFlow<Int> = _minDiscount.asStateFlow()
+
+    private val _alertMode = MutableStateFlow(
+        AlertMode.entries.firstOrNull { it.name == prefs.getString(KEY_ALERT_MODE, null) } ?: AlertMode.AllDeals
+    )
+    val alertMode: StateFlow<AlertMode> = _alertMode.asStateFlow()
+
+    /** Words like "iphone" or "air fryer": with [AlertMode.KeywordsOnly], only matching deals alert. */
+    private val _keywords = MutableStateFlow(prefs.getStringSet(KEY_KEYWORDS, emptySet())!!.sorted())
+    val keywords: StateFlow<List<String>> = _keywords.asStateFlow()
 
     /** posted_at of the newest deal already shown or announced (static-feed mode only). */
     var lastSeenPostedAt: Long
@@ -52,9 +64,36 @@ class AppSettings private constructor(context: Context) {
         _minDiscount.value = percent
     }
 
-    /** Whether a deal passes the user's notification filter. */
-    fun wantsNotification(discount: Int?): Boolean =
-        notifications.value && (minDiscount.value == 0 || (discount ?: 0) >= minDiscount.value)
+    fun setAlertMode(mode: AlertMode) {
+        prefs.edit { putString(KEY_ALERT_MODE, mode.name) }
+        _alertMode.value = mode
+    }
+
+    fun addKeyword(word: String) {
+        val clean = word.trim().lowercase()
+        if (clean.isEmpty() || clean in _keywords.value) return
+        saveKeywords(_keywords.value + clean)
+    }
+
+    fun removeKeyword(word: String) = saveKeywords(_keywords.value - word)
+
+    private fun saveKeywords(words: List<String>) {
+        prefs.edit { putStringSet(KEY_KEYWORDS, words.toSet()) }
+        _keywords.value = words.sorted()
+    }
+
+    /** The user's keywords found in a deal's title or post, if any. */
+    fun matchingKeywords(title: String, text: String): List<String> {
+        val haystack = "$title\n$text".lowercase()
+        return keywords.value.filter { haystack.contains(it) }
+    }
+
+    /** Whether a new deal passes the user's notification filters. */
+    fun wantsNotification(discount: Int?, title: String, text: String, expired: Boolean = false): Boolean {
+        if (!notifications.value || expired) return false
+        if (alertMode.value == AlertMode.KeywordsOnly && matchingKeywords(title, text).isEmpty()) return false
+        return minDiscount.value == 0 || (discount ?: 0) >= minDiscount.value
+    }
 
     companion object {
         private const val KEY_THEME = "theme_mode"
@@ -62,6 +101,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_NOTIFY = "notifications"
         private const val KEY_MIN_DISCOUNT = "notify_min_discount"
         private const val KEY_LAST_SEEN = "last_seen_posted_at"
+        private const val KEY_ALERT_MODE = "alert_mode"
+        private const val KEY_KEYWORDS = "alert_keywords"
 
         @Volatile private var instance: AppSettings? = null
 

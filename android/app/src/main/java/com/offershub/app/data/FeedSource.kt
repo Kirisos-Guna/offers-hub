@@ -11,11 +11,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 sealed interface FeedEvent {
     /** [live] = straight from the server (not a cached copy while offline). */
@@ -24,8 +27,11 @@ sealed interface FeedEvent {
 }
 
 interface FeedSource {
-    /** Current deals, newest first; emits again whenever they change. */
+    /** The newest deals; emits again whenever they change. */
     fun feed(): Flow<FeedEvent>
+
+    /** Up to [limit] deals posted before [beforePostedAt], newest first (scrolling further). */
+    suspend fun older(beforePostedAt: Long, limit: Int): List<Offer>
 
     companion object {
         /** Firestore (instant) when the app was built with Firebase settings, else the static feed. */
@@ -34,13 +40,18 @@ interface FeedSource {
     }
 }
 
-/** Live feed: the listener writes each deal to Firestore the moment it's posted. */
+/**
+ * Live feed: the listener writes each deal to Firestore the moment it's posted. Only the newest
+ * page is watched live; older deals load page by page as the user scrolls. Every document read
+ * counts against the free plan's 50,000 reads a day, so pages stay small.
+ */
 class FirestoreFeed : FeedSource {
+    private val offers = FirebaseFirestore.getInstance().collection("offers")
+
     override fun feed(): Flow<FeedEvent> = callbackFlow {
-        val registration = FirebaseFirestore.getInstance()
-            .collection("offers")
+        val registration = offers
             .orderBy("posted_at", Query.Direction.DESCENDING)
-            .limit(LIMIT)
+            .limit(LIVE_PAGE)
             // Metadata changes too: when the server confirms the cached deals unchanged, that is
             // the only event that turns "Offline · saved deals" into "Live".
             .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
@@ -57,13 +68,24 @@ class FirestoreFeed : FeedSource {
         awaitClose { registration.remove() }
     }
 
+    override suspend fun older(beforePostedAt: Long, limit: Int): List<Offer> =
+        suspendCancellableCoroutine { cont ->
+            offers.orderBy("posted_at", Query.Direction.DESCENDING)
+                .whereLessThan("posted_at", beforePostedAt)
+                .limit(limit.toLong())
+                .get()
+                .addOnSuccessListener { snap ->
+                    cont.resume(snap.documents.mapNotNull { d -> d.data?.let { firestoreOffer(d.id, it) } })
+                }
+                .addOnFailureListener { cont.resumeWithException(it) }
+        }
+
     private companion object {
-        // Every app start reads these documents; the free Spark plan allows 50,000 reads a day.
-        const val LIMIT = 200L
+        const val LIVE_PAGE = 60L
     }
 }
 
-/** Fallback for builds without Firebase: polls the published offers.json. */
+/** Fallback for builds without Firebase: polls the published offers.json (all deals at once). */
 class StaticFeed(baseUrl: String = DEFAULT_URL) : FeedSource {
     private val baseUrl = baseUrl.trimEnd('/')
 
@@ -79,6 +101,8 @@ class StaticFeed(baseUrl: String = DEFAULT_URL) : FeedSource {
             delay(POLL_MS)
         }
     }
+
+    override suspend fun older(beforePostedAt: Long, limit: Int): List<Offer> = emptyList()
 
     suspend fun fetch(): List<Offer> = withContext(Dispatchers.IO) {
         // The query string skips GitHub Pages' 10-minute cache.

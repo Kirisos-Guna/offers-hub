@@ -30,7 +30,7 @@ class NewDealsWorker(context: Context, params: WorkerParameters) : CoroutineWork
         feed.maxOfOrNull { it.postedAt }?.let { if (it > lastSeen) settings.lastSeenPostedAt = it }
         // The first run only records where we are, so the user isn't flooded with old deals.
         if (lastSeen == 0L || AppVisibility.foreground) return Result.success()
-        fresh.filter { settings.wantsNotification(it.discount) }.take(5).forEach { o ->
+        fresh.filter { settings.wantsNotification(it.discount, it.title, it.text, it.expired) }.take(5).forEach { o ->
             DealNotifier.show(
                 applicationContext,
                 DealAlert(o.id, o.title, o.store, o.price, o.mrp, o.discount, o.image, o.url),

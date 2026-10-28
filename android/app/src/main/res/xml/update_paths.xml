@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Downloaded update APKs, shared with the package installer. -->
+<!-- Files shared with other apps: update APKs (package installer) and deal images (sharing). -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <cache-path name="share" path="share/" />
 </paths>

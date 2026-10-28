@@ -38,8 +38,8 @@ object DealNotifier {
     private const val SUMMARY_ID = 0
 
     fun createChannel(context: Context) {
-        val channel = NotificationChannel(CHANNEL_ID, "New deals", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "A notification for every new deal, as soon as it's posted"
+        val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.notif_channel), NotificationManager.IMPORTANCE_HIGH).apply {
+            description = context.getString(R.string.notif_channel_desc)
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -67,7 +67,7 @@ object DealNotifier {
         val details = listOfNotNull(
             deal.price?.let { formatPrice(it) },
             deal.mrp?.takeIf { deal.price != null && it > deal.price }?.let { "MRP ${formatPrice(it)}" },
-            deal.discount?.let { "$it% off" },
+            deal.discount?.let { context.getString(R.string.percent_off, it) },
             deal.store.takeIf { it != "Other" },
         ).joinToString(" · ")
 
@@ -75,9 +75,9 @@ object DealNotifier {
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.notification_accent))
             .setContentTitle(deal.title)
-            .setContentText(details.ifEmpty { "New deal" })
+            .setContentText(details.ifEmpty { context.getString(R.string.notif_new_deal) })
             .setContentIntent(open)
-            .addAction(0, "Buy now", buy)
+            .addAction(0, context.getString(R.string.notif_buy_now), buy)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -99,7 +99,7 @@ object DealNotifier {
                 NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_notification)
                     .setColor(ContextCompat.getColor(context, R.color.notification_accent))
-                    .setContentTitle("New deals")
+                    .setContentTitle(context.getString(R.string.notif_new_deals))
                     .setGroup(GROUP)
                     .setGroupSummary(true)
                     .setAutoCancel(true)

@@ -74,14 +74,46 @@ it arrives about a minute late. 750 free hours a month cover one service running
    banner offers the update, downloads it and opens Android's installer.
 
 ## App features
-- Live feed: new deals appear on screen within seconds; a "N new deals" pill when scrolled down
-- Search, store filter chips, sort by latest / top discount / lowest price
-- Deal sheet: big image, price, MRP, "You save", one button per link, share
-- Notifications for every new deal with picture and **Buy now** button; filter by minimum
-  discount; tapping opens the deal
+- Live feed: new deals appear on screen within seconds; a "N new deals" pill when scrolled down.
+  The newest 60 deals are live; older ones load page by page while scrolling.
+- 🔥 **Hot right now**: biggest discounts of the last 3 hours (real products with a price)
+- **Categories** (Electronics, Fashion, Home & Kitchen, …), store chips, search, sort
+- **Ended deals**: posts the channel edits to "Over now ❌ / Sold out / Expired" are faded and never announced
+- **Saved deals ♥**, kept on the phone even after a deal leaves the feed
+- Deal sheet: big image, price, MRP, "You save", one button per link, share as text or **as an image**
+- **Notifications** for every new deal (picture + **Buy now**), or only for **your keywords**
+  ("iphone", "air fryer"), with a minimum discount; tapping opens the deal
+- **Home-screen widget** with the latest deals
+- **English, Tamil and Hindi** (Android 13+: Settings → Language)
 - Theme: System / Light / Dark, optional wallpaper colours (Android 12+)
-- In-app updates from GitHub releases
+- In-app updates from GitHub releases; crash reports in Firebase Crashlytics
 - Works offline with the last loaded deals
+
+## Optional settings (Render environment variables)
+| Variable | What it does |
+|---|---|
+| `AMAZON_AFFILIATE_TAG`, `FLIPKART_AFFILIATE_ID` | Put **your** affiliate IDs on deal links. Off by default. The posts carry the channel owners' affiliate links, so only turn this on with their permission. |
+| `KEEP_DAYS` | How long deals stay (default 7). |
+
+## Monitoring
+- `https://offers-hub-listener.onrender.com/` shows the listener's state, channels and errors.
+- It answers **503** when something is wrong (error, or no new deal for 6 hours). cron-job.org
+  then emails you, and Render restarts the service.
+- App crashes appear in the Firebase console under **Crashlytics**.
+
+## Using a separate Telegram account for the listener
+So that a Telegram restriction on the listener can't affect your personal account:
+1. Create a Telegram account with another phone number, and join every channel with it
+   (open each invite link in Telegram; for expired links, ask the channel or find it by name).
+2. If a channel's invite link changed, update it in `backend/config.py` (or use `title:<name>`).
+3. Run `backend\.venv\Scripts\python.exe backend\login.py --string`, log in with the new number,
+   and put the printed string into Render → Environment → `TG_SESSION_STRING`.
+   Render restarts the listener with the new account.
+
+## Not done yet: Amazon's product API
+Real titles, photos and prices for the deals Amazon currently blocks need Amazon's own product
+API, which requires an Amazon Associates account with qualifying sales. Once you have API
+access, the listener can use it instead of reading Amazon's pages.
 
 ## Development
 - Tests: `cd backend && .venv\Scripts\python.exe test_parser.py && .venv\Scripts\python.exe test_publisher.py`

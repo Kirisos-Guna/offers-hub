@@ -13,15 +13,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import com.offershub.app.R
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -36,13 +46,20 @@ import com.offershub.app.ui.theme.LiveGreen
 import com.offershub.app.ui.theme.storeColor
 
 @Composable
-fun OfferCard(offer: Offer, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun OfferCard(
+    offer: Offer,
+    saved: Boolean,
+    onToggleSave: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 1.dp,
-        modifier = modifier,
+        // Deals the channel marked as over stay visible but step back.
+        modifier = modifier.alpha(if (offer.expired) 0.55f else 1f),
     ) {
         Column {
             Box(
@@ -57,12 +74,17 @@ fun OfferCard(offer: Offer, onClick: () -> Unit, modifier: Modifier = Modifier) 
                     Modifier.fillMaxWidth().padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    offer.discount?.let { DiscountBadge(it) } ?: Spacer(Modifier)
-                    if (offer.isNew()) Pill("NEW", LiveGreen, Color.White)
+                    when {
+                        offer.expired -> Pill(stringResource(R.string.expired_badge), Color(0xFF5F5F5F), Color.White)
+                        offer.discount != null -> DiscountBadge(offer.discount)
+                        else -> Spacer(Modifier)
+                    }
+                    if (offer.isNew()) Pill(stringResource(R.string.new_badge), LiveGreen, Color.White)
                 }
                 if (offer.image != null && offer.store != "Other") {
                     StoreBadge(offer.store, Modifier.align(Alignment.BottomStart).padding(8.dp))
                 }
+                SaveButton(saved, onToggleSave, Modifier.align(Alignment.BottomEnd).padding(4.dp))
             }
             Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp)) {
                 Text(
@@ -83,6 +105,57 @@ fun OfferCard(offer: Offer, onClick: () -> Unit, modifier: Modifier = Modifier) 
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+        }
+    }
+}
+
+/** ♥ toggle on a white circle, readable on any product photo. */
+@Composable
+fun SaveButton(saved: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(
+        onClick = onToggle,
+        modifier = modifier.size(40.dp),
+        colors = IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.9f)),
+    ) {
+        Icon(
+            if (saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            contentDescription = stringResource(if (saved) R.string.cd_unsave else R.string.cd_save),
+            tint = if (saved) DealRed else Color(0xFF53433F),
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/** Small card for the "Hot right now" row. */
+@Composable
+fun HotCard(offer: Offer, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
+        modifier = modifier.width(136.dp),
+    ) {
+        Column {
+            Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(4.dp).clip(MaterialTheme.shapes.small)) {
+                OfferImage(offer, Modifier.fillMaxSize())
+                offer.discount?.let { DiscountBadge(it, Modifier.padding(6.dp)) }
+            }
+            Text(
+                offer.title,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            Text(
+                offer.price?.let { formatPrice(it) } ?: stringResource(R.string.see_deal),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+            )
         }
     }
 }
@@ -135,7 +208,7 @@ fun Pill(text: String, container: Color, content: Color, modifier: Modifier = Mo
 
 @Composable
 fun DiscountBadge(discount: Int, modifier: Modifier = Modifier) =
-    Pill("$discount% OFF", DealRed, Color.White, modifier)
+    Pill(stringResource(R.string.percent_off_caps, discount), DealRed, Color.White, modifier)
 
 @Composable
 fun StoreBadge(store: String, modifier: Modifier = Modifier) {
@@ -177,7 +250,7 @@ fun PriceRow(offer: Offer, modifier: Modifier = Modifier, large: Boolean = false
             )
         } else {
             Text(
-                "See deal",
+                stringResource(R.string.see_deal),
                 style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

@@ -22,7 +22,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.offershub.app.R
 
 /** Slim card at the top of the feed when a newer version is out. */
 @Composable
@@ -36,11 +38,11 @@ fun UpdateBanner(version: String, onUpdate: () -> Unit, onDismiss: () -> Unit) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Update available", style = MaterialTheme.typography.titleSmall)
-                Text("Version $version", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.update_available), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.version_x, version), style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = onUpdate) { Text("Update") }
-            IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Not now") }
+            Button(onClick = onUpdate) { Text(stringResource(R.string.update)) }
+            IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, stringResource(R.string.not_now)) }
         }
     }
 }
@@ -56,22 +58,22 @@ fun UpdateDialog(state: UpdateState, onDownload: () -> Unit, onInstall: () -> Un
     }
     AlertDialog(
         onDismissRequest = { if (state !is UpdateState.Downloading) onClose() },
-        title = { Text(if (update != null) "Version ${update.version}" else "Update") },
+        title = { Text(if (update != null) stringResource(R.string.version_x, update.version) else stringResource(R.string.update)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (state) {
                     is UpdateState.Downloading -> {
-                        Text("Downloading… ${(state.progress * 100).toInt()}%")
+                        Text(stringResource(R.string.downloading_pct, (state.progress * 100).toInt()))
                         LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                     }
                     is UpdateState.Ready -> Text(
-                        "Downloaded. Tap Install. The first time, Android asks you to allow Offers Hub to install updates."
+                        stringResource(R.string.downloaded_text)
                     )
                     is UpdateState.Failed -> Text(state.message)
                     else -> {}
                 }
                 if (update != null && update.notes.isNotBlank() && state !is UpdateState.Downloading) {
-                    Text("What's new", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.whats_new), style = MaterialTheme.typography.titleSmall)
                     Text(
                         update.notes.replace("### ", "").replace("**", ""),
                         style = MaterialTheme.typography.bodySmall,
@@ -82,13 +84,13 @@ fun UpdateDialog(state: UpdateState, onDownload: () -> Unit, onInstall: () -> Un
         },
         confirmButton = {
             when (state) {
-                is UpdateState.Available -> Button(onClick = onDownload) { Text("Download") }
-                is UpdateState.Ready -> Button(onClick = onInstall) { Text("Install") }
+                is UpdateState.Available -> Button(onClick = onDownload) { Text(stringResource(R.string.download)) }
+                is UpdateState.Ready -> Button(onClick = onInstall) { Text(stringResource(R.string.install)) }
                 else -> {}
             }
         },
         dismissButton = {
-            if (state !is UpdateState.Downloading) TextButton(onClick = onClose) { Text("Later") }
+            if (state !is UpdateState.Downloading) TextButton(onClick = onClose) { Text(stringResource(R.string.later)) }
         },
     )
 }

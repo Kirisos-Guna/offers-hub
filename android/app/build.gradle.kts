@@ -1,5 +1,6 @@
 import groovy.json.JsonSlurper
 import java.util.Properties
+import java.util.UUID
 
 plugins {
     alias(libs.plugins.android.application)
@@ -47,8 +48,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // -PversionCodeOverride / -PversionNameOverride build an older-looking copy, to test updates.
-        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toInt() ?: 4
-        versionName = providers.gradleProperty("versionNameOverride").orNull ?: "2.0.1"
+        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toInt() ?: 5
+        versionName = providers.gradleProperty("versionNameOverride").orNull ?: "2.1.0"
 
         firebaseConfig?.let {
             resValue("string", "google_app_id", it.appId)
@@ -56,6 +57,10 @@ android {
             resValue("string", "project_id", it.projectId)
             resValue("string", "gcm_defaultSenderId", it.senderId)
             resValue("string", "google_storage_bucket", it.bucket)
+            // Crashlytics wants a build ID, normally written by its Gradle plugin.
+            val buildId = UUID.nameUUIDFromBytes("${it.appId}-$versionCode".toByteArray()).toString()
+            resValue("string", "com.crashlytics.android.build_id", buildId)
+            resValue("string", "com.google.firebase.crashlytics.mapping_file_id", buildId)
         }
     }
 
@@ -108,5 +113,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.androidx.glance.appwidget)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

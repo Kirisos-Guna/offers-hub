@@ -1,0 +1,126 @@
+<resources>
+    <!-- Feed -->
+    <string name="search_hint">डील, ब्रांड, प्रोडक्ट खोजें</string>
+    <string name="status_live">लाइव · %1$d डील</string>
+    <string name="status_offline">ऑफ़लाइन · सेव की गई डील</string>
+    <string name="status_connecting">कनेक्ट हो रहा है…</string>
+    <string name="status_error">सर्वर से संपर्क नहीं हो पा रहा</string>
+    <string name="sort_latest">नवीनतम</string>
+    <string name="sort_discount">सबसे ज़्यादा छूट</string>
+    <string name="sort_price">सबसे कम कीमत</string>
+    <string name="filter_all">सभी</string>
+    <string name="filter_more">अन्य</string>
+    <string name="hot_title">🔥 अभी सबसे हॉट</string>
+    <string name="saved_title">सेव की गई डील</string>
+    <string name="saved_empty_title">कोई सेव की गई डील नहीं</string>
+    <string name="saved_empty_body">किसी डील को यहाँ रखने के लिए ♡ दबाएँ।</string>
+    <plurals name="new_deals_count">
+        <item quantity="one">%d नई डील</item>
+        <item quantity="other">%d नई डील</item>
+    </plurals>
+    <string name="error_title">डील लोड नहीं हो सकीं</string>
+    <string name="error_body">अपना इंटरनेट कनेक्शन जाँचें।</string>
+    <string name="try_again">फिर से कोशिश करें</string>
+    <string name="no_match_title">कोई मेल खाती डील नहीं</string>
+    <string name="no_match_body">कोई और खोज, स्टोर या कैटेगरी आज़माएँ।</string>
+    <string name="clear_filters">फ़िल्टर हटाएँ</string>
+    <string name="no_deals_title">अभी कोई डील नहीं</string>
+    <string name="no_deals_body">नई डील पोस्ट होते ही यहाँ दिखेंगी।</string>
+    <string name="load_more">और डील</string>
+    <string name="just_now">अभी</string>
+    <string name="cd_settings">सेटिंग्स</string>
+    <string name="cd_clear_search">खोज साफ़ करें</string>
+    <string name="cd_saved">सेव की गई डील</string>
+    <string name="cd_save">डील सेव करें</string>
+    <string name="cd_unsave">सेव से हटाएँ</string>
+    <string name="cd_back">वापस</string>
+
+    <!-- Deal -->
+    <string name="new_badge">नई</string>
+    <string name="expired_badge">ख़त्म</string>
+    <string name="deal_ended">चैनल के अनुसार यह डील ख़त्म हो चुकी है।</string>
+    <string name="percent_off">%1$d%% छूट</string>
+    <string name="percent_off_caps">%1$d%% छूट</string>
+    <string name="see_deal">डील देखें</string>
+    <string name="you_save">आपकी बचत %1$s</string>
+    <string name="buy_label">खरीदें · %1$s</string>
+    <string name="buy_on">%1$s पर खरीदें</string>
+    <string name="open_deal">डील खोलें</string>
+    <string name="share_deal">शेयर करें</string>
+    <string name="share_image">इमेज के रूप में शेयर करें</string>
+    <string name="share_footer">Offers Hub · लाइव डील</string>
+    <string name="original_post">मूल पोस्ट</string>
+    <string name="no_app">इस लिंक को खोलने के लिए कोई ऐप नहीं है</string>
+
+    <!-- Categories -->
+    <string name="cat_electronics">इलेक्ट्रॉनिक्स</string>
+    <string name="cat_fashion">फ़ैशन</string>
+    <string name="cat_home">घर और किचन</string>
+    <string name="cat_beauty">ब्यूटी और हेल्थ</string>
+    <string name="cat_grocery">किराना</string>
+    <string name="cat_kids">बच्चे और खिलौने</string>
+    <string name="cat_sports">खेल और फ़िटनेस</string>
+    <string name="cat_auto">कार और बाइक</string>
+    <string name="cat_cards">कार्ड और ऑफ़र</string>
+
+    <!-- Notifications and widget -->
+    <string name="notif_channel">नई डील</string>
+    <string name="notif_channel_desc">हर नई डील के पोस्ट होते ही एक सूचना</string>
+    <string name="notif_new_deal">नई डील</string>
+    <string name="notif_new_deals">नई डील</string>
+    <string name="notif_buy_now">अभी खरीदें</string>
+    <string name="widget_name">नवीनतम डील</string>
+    <string name="widget_description">आपके चैनलों की सबसे नई डील</string>
+    <string name="widget_empty">डील लोड करने के लिए Offers Hub खोलें</string>
+
+    <!-- Settings -->
+    <string name="settings_title">सेटिंग्स</string>
+    <string name="section_appearance">दिखावट</string>
+    <string name="theme">थीम</string>
+    <string name="theme_system">सिस्टम</string>
+    <string name="theme_light">लाइट</string>
+    <string name="theme_dark">डार्क</string>
+    <string name="wallpaper_colours">वॉलपेपर रंग</string>
+    <string name="wallpaper_colours_desc">ऐप को आपके वॉलपेपर के रंगों से मिलाएँ (Material You)</string>
+    <string name="language">भाषा</string>
+    <string name="language_desc">English, தமிழ் या हिन्दी</string>
+    <string name="section_notifications">सूचनाएँ</string>
+    <string name="alerts_title">नई डील की सूचना</string>
+    <string name="alerts_desc">डील पोस्ट होते ही सूचना</string>
+    <string name="alert_for">किसके लिए सूचना दें</string>
+    <string name="alert_all">हर डील</string>
+    <string name="alert_keywords">मेरे कीवर्ड</string>
+    <string name="keywords_hint">कीवर्ड जोड़ें, जैसे iphone</string>
+    <string name="keyword_add">जोड़ें</string>
+    <string name="keywords_empty">\"air fryer\" या \"boat\" जैसे प्रोडक्ट या ब्रांड जोड़ें।</string>
+    <string name="cd_remove_keyword">%1$s हटाएँ</string>
+    <string name="min_discount_title">कम से कम इतनी छूट वाली डील</string>
+    <string name="any">कोई भी</string>
+    <string name="notif_settings">आवाज़, वाइब्रेशन और अधिक</string>
+    <string name="section_updates">अपडेट</string>
+    <string name="installed_version">इंस्टॉल वर्ज़न</string>
+    <string name="checking">जाँच हो रही है…</string>
+    <string name="up_to_date">आपके पास नवीनतम वर्ज़न है</string>
+    <string name="update_status_available">वर्ज़न %1$s उपलब्ध है</string>
+    <string name="update_status_downloading">वर्ज़न %1$s डाउनलोड हो रहा है…</string>
+    <string name="update_status_ready">वर्ज़न %1$s इंस्टॉल के लिए तैयार है</string>
+    <string name="update_now">अभी अपडेट करें</string>
+    <string name="check_updates">अपडेट जाँचें</string>
+    <string name="update_check_failed">अपडेट की जाँच नहीं हो सकी</string>
+    <string name="section_about">ऐप के बारे में</string>
+    <string name="deals_now">अभी की डील</string>
+    <string name="about_text">टेलीग्राम डील चैनलों पर पोस्ट होते ही डील यहाँ आती हैं। Offers Hub को किसी अकाउंट की ज़रूरत नहीं और यह आपको ट्रैक नहीं करता। खरीदारी दुकान के अपने ऐप या साइट पर होती है।</string>
+
+    <!-- In-app update -->
+    <string name="update_available">अपडेट उपलब्ध है</string>
+    <string name="version_x">वर्ज़न %1$s</string>
+    <string name="update">अपडेट</string>
+    <string name="not_now">अभी नहीं</string>
+    <string name="downloading_pct">डाउनलोड हो रहा है… %1$d%%</string>
+    <string name="downloaded_text">डाउनलोड हो गया। इंस्टॉल दबाएँ। पहली बार Android आपसे Offers Hub को अपडेट इंस्टॉल करने की अनुमति माँगेगा।</string>
+    <string name="whats_new">नया क्या है</string>
+    <string name="download">डाउनलोड</string>
+    <string name="install">इंस्टॉल</string>
+    <string name="later">बाद में</string>
+    <string name="download_failed">डाउनलोड नहीं हो सका</string>
+</resources>

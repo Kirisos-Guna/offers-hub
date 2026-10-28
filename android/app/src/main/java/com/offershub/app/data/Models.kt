@@ -21,6 +21,10 @@ data class Offer(
     val text: String,
     /** Unix seconds. */
     val postedAt: Long,
+    /** One of [Categories.ALL], or "Other". */
+    val category: String = "Other",
+    /** The channel edited the post to say the deal is over. */
+    val expired: Boolean = false,
 ) {
     /** How much cheaper than MRP, when both are known. */
     val savings: Double?
@@ -29,10 +33,14 @@ data class Offer(
 
 data class Store(val name: String, val count: Int)
 
-enum class SortOrder(val label: String) {
-    Latest("Latest"),
-    Discount("Top discount"),
-    Price("Lowest price"),
+enum class SortOrder { Latest, Discount, Price }
+
+/** Categories the listener assigns (backend/categories.py), in display order. */
+object Categories {
+    val ALL = listOf(
+        "Electronics", "Fashion", "Home & Kitchen", "Beauty & Health", "Grocery",
+        "Kids & Toys", "Sports & Fitness", "Car & Bike", "Cards & Offers",
+    )
 }
 
 private fun JSONObject.optStringOrNull(key: String): String? =
@@ -64,8 +72,19 @@ internal fun JSONObject.toOffer(baseUrl: String): Offer {
         links = links,
         text = optString("text"),
         postedAt = optLong("posted_at"),
+        category = optString("category", "Other"),
+        expired = optBoolean("expired", false),
     )
 }
+
+/** For saving deals on the phone (and the widget's cache). */
+internal fun Offer.toJson(): JSONObject = JSONObject()
+    .put("id", id).put("source", source).put("title", title).put("tag", tag).put("store", store)
+    .put("price", price).put("mrp", mrp).put("discount", discount).put("image", image).put("url", url)
+    .put("links", JSONArray(links.map { JSONObject().put("url", it.url).put("label", it.label) }))
+    .put("text", text).put("posted_at", postedAt).put("category", category).put("expired", expired)
+
+internal fun JSONObject.toSavedOffer(): Offer = toOffer(baseUrl = "").copy(id = getString("id"))
 
 /** A deal from a Firestore `offers` document (written by backend/firebase_publisher.py). */
 internal fun firestoreOffer(id: String, data: Map<String, Any?>): Offer? {
@@ -88,5 +107,7 @@ internal fun firestoreOffer(id: String, data: Map<String, Any?>): Offer? {
         links = links.ifEmpty { listOf(OfferLink(url, "")) },
         text = data["text"] as? String ?: "",
         postedAt = (data["posted_at"] as? Number)?.toLong() ?: 0L,
+        category = data["category"] as? String ?: "Other",
+        expired = data["expired"] as? Boolean ?: false,
     )
 }

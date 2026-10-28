@@ -3,6 +3,16 @@ package com.offershub.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import com.offershub.app.R
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,10 +46,12 @@ import androidx.compose.ui.unit.dp
 import com.offershub.app.data.Offer
 import com.offershub.app.ui.theme.LiveGreen
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun OfferDetailSheet(offer: Offer, onDismiss: () -> Unit) {
+fun OfferDetailSheet(offer: Offer, saved: Boolean, onToggleSave: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sharingImage by remember { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -60,17 +72,38 @@ fun OfferDetailSheet(offer: Offer, onDismiss: () -> Unit) {
             ) {
                 OfferImage(offer, Modifier.fillMaxWidth().height(260.dp))
                 Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    offer.discount?.let { DiscountBadge(it) }
-                    if (offer.isNew()) Pill("NEW", LiveGreen, Color.White)
+                    if (offer.expired) Pill(stringResource(R.string.expired_badge), Color(0xFF5F5F5F), Color.White)
+                    else offer.discount?.let { DiscountBadge(it) }
+                    if (offer.isNew()) Pill(stringResource(R.string.new_badge), LiveGreen, Color.White)
+                }
+                SaveButton(saved, onToggleSave, Modifier.align(Alignment.BottomEnd).padding(8.dp))
+            }
+
+            if (offer.expired) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.deal_ended),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
                 }
             }
 
-            Row(
+            FlowRow(
                 Modifier.padding(top = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 if (offer.store != "Other") StoreBadge(offer.store)
+                if (offer.category != "Other") {
+                    Pill("${categoryEmoji(offer.category)} ${categoryName(offer.category)}",
+                        MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+                }
                 offer.displayTag?.let {
                     Pill(it.uppercase(), MaterialTheme.colorScheme.primaryContainer,
                         MaterialTheme.colorScheme.onPrimaryContainer)
@@ -84,7 +117,7 @@ fun OfferDetailSheet(offer: Offer, onDismiss: () -> Unit) {
             PriceRow(offer, Modifier.padding(top = 8.dp), large = true)
             offer.savings?.let {
                 Text(
-                    "You save ${formatPrice(it)}",
+                    stringResource(R.string.you_save, formatPrice(it)),
                     style = MaterialTheme.typography.labelLarge,
                     color = LiveGreen,
                     modifier = Modifier.padding(top = 2.dp),
@@ -100,9 +133,9 @@ fun OfferDetailSheet(offer: Offer, onDismiss: () -> Unit) {
             Spacer(Modifier.height(18.dp))
             offer.links.forEachIndexed { index, link ->
                 val label = when {
-                    link.label.isNotBlank() -> "Buy · ${link.label}"
-                    offer.store != "Other" -> "Buy on ${offer.store}"
-                    else -> "Open deal"
+                    link.label.isNotBlank() -> stringResource(R.string.buy_label, link.label)
+                    offer.store != "Other" -> stringResource(R.string.buy_on, offer.store)
+                    else -> stringResource(R.string.open_deal)
                 }
                 val onClick = { openLink(context, link.url) }
                 if (index == 0) {
@@ -117,17 +150,32 @@ fun OfferDetailSheet(offer: Offer, onDismiss: () -> Unit) {
                     }
                 }
             }
-            FilledTonalButton(
-                onClick = { shareOffer(context, offer) },
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            ) {
-                Icon(Icons.Outlined.Share, null, Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Share deal")
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = {
+                        sharingImage = true
+                        scope.launch {
+                            try {
+                                shareDealImage(context, offer)
+                            } finally {
+                                sharingImage = false
+                            }
+                        }
+                    },
+                    enabled = !sharingImage,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Share, null, Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(stringResource(R.string.share_image), maxLines = 1)
+                }
+                OutlinedButton(onClick = { shareOffer(context, offer) }, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.share_deal), maxLines = 1)
+                }
             }
 
             Text(
-                "Original post",
+                stringResource(R.string.original_post),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(top = 20.dp, bottom = 6.dp),
             )

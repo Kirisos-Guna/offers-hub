@@ -1,3 +1,128 @@
 <resources>
-    <string name="app_name">Offers Hub</string>
+    <string name="app_name" translatable="false">Offers Hub</string>
+
+    <!-- Feed -->
+    <string name="search_hint">Search deals, brands, products</string>
+    <string name="status_live">Live · %1$d deals</string>
+    <string name="status_offline">Offline · showing saved deals</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_error">Can\'t reach the server</string>
+    <string name="sort_latest">Latest</string>
+    <string name="sort_discount">Top discount</string>
+    <string name="sort_price">Lowest price</string>
+    <string name="filter_all">All</string>
+    <string name="filter_more">More</string>
+    <string name="hot_title">🔥 Hot right now</string>
+    <string name="saved_title">Saved deals</string>
+    <string name="saved_empty_title">No saved deals</string>
+    <string name="saved_empty_body">Tap ♡ on a deal to keep it here.</string>
+    <plurals name="new_deals_count">
+        <item quantity="one">%d new deal</item>
+        <item quantity="other">%d new deals</item>
+    </plurals>
+    <string name="error_title">Couldn\'t load deals</string>
+    <string name="error_body">Check your connection.</string>
+    <string name="try_again">Try again</string>
+    <string name="no_match_title">No deals match</string>
+    <string name="no_match_body">Try another search, store or category.</string>
+    <string name="clear_filters">Clear filters</string>
+    <string name="no_deals_title">No deals yet</string>
+    <string name="no_deals_body">New deals appear here the moment they\'re posted.</string>
+    <string name="load_more">Load more deals</string>
+    <string name="just_now">Just now</string>
+    <string name="cd_settings">Settings</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="cd_saved">Saved deals</string>
+    <string name="cd_save">Save deal</string>
+    <string name="cd_unsave">Remove from saved</string>
+    <string name="cd_back">Back</string>
+
+    <!-- Deal -->
+    <string name="new_badge">NEW</string>
+    <string name="expired_badge">ENDED</string>
+    <string name="deal_ended">The channel says this deal has ended.</string>
+    <string name="percent_off">%1$d%% off</string>
+    <string name="percent_off_caps">%1$d%% OFF</string>
+    <string name="see_deal">See deal</string>
+    <string name="you_save">You save %1$s</string>
+    <string name="buy_label">Buy · %1$s</string>
+    <string name="buy_on">Buy on %1$s</string>
+    <string name="open_deal">Open deal</string>
+    <string name="share_deal">Share deal</string>
+    <string name="share_image">Share as image</string>
+    <string name="share_footer">Offers Hub · live deals</string>
+    <string name="original_post">Original post</string>
+    <string name="no_app">No app can open this link</string>
+
+    <!-- Categories -->
+    <string name="cat_electronics">Electronics</string>
+    <string name="cat_fashion">Fashion</string>
+    <string name="cat_home">Home &amp; Kitchen</string>
+    <string name="cat_beauty">Beauty &amp; Health</string>
+    <string name="cat_grocery">Grocery</string>
+    <string name="cat_kids">Kids &amp; Toys</string>
+    <string name="cat_sports">Sports &amp; Fitness</string>
+    <string name="cat_auto">Car &amp; Bike</string>
+    <string name="cat_cards">Cards &amp; Offers</string>
+
+    <!-- Notifications and widget -->
+    <string name="notif_channel">New deals</string>
+    <string name="notif_channel_desc">A notification for every new deal, as soon as it\'s posted</string>
+    <string name="notif_new_deal">New deal</string>
+    <string name="notif_new_deals">New deals</string>
+    <string name="notif_buy_now">Buy now</string>
+    <string name="widget_name">Latest deals</string>
+    <string name="widget_description">The newest deals from your channels</string>
+    <string name="widget_empty">Open Offers Hub to load deals</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="theme">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="wallpaper_colours">Wallpaper colours</string>
+    <string name="wallpaper_colours_desc">Match the app to your wallpaper (Material You)</string>
+    <string name="language">Language</string>
+    <string name="language_desc">English, தமிழ் or हिन्दी</string>
+    <string name="section_notifications">Notifications</string>
+    <string name="alerts_title">New deal alerts</string>
+    <string name="alerts_desc">A notification the moment a deal is posted</string>
+    <string name="alert_for">Alert me for</string>
+    <string name="alert_all">Every deal</string>
+    <string name="alert_keywords">My keywords</string>
+    <string name="keywords_hint">Add a keyword, e.g. iphone</string>
+    <string name="keyword_add">Add</string>
+    <string name="keywords_empty">Add products or brands you want, like \"air fryer\" or \"boat\".</string>
+    <string name="cd_remove_keyword">Remove %1$s</string>
+    <string name="min_discount_title">Only deals with at least</string>
+    <string name="any">Any</string>
+    <string name="notif_settings">Sound, vibration and more</string>
+    <string name="section_updates">Updates</string>
+    <string name="installed_version">Installed version</string>
+    <string name="checking">Checking…</string>
+    <string name="up_to_date">You have the latest version</string>
+    <string name="update_status_available">Version %1$s is available</string>
+    <string name="update_status_downloading">Downloading version %1$s…</string>
+    <string name="update_status_ready">Version %1$s is ready to install</string>
+    <string name="update_now">Update now</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="update_check_failed">Couldn\'t check for updates</string>
+    <string name="section_about">About</string>
+    <string name="deals_now">Deals right now</string>
+    <string name="about_text">Deals are collected from Telegram deal channels the moment they\'re posted. Offers Hub needs no account and doesn\'t track you. Buying happens in the shop\'s own app or site.</string>
+
+    <!-- In-app update -->
+    <string name="update_available">Update available</string>
+    <string name="version_x">Version %1$s</string>
+    <string name="update">Update</string>
+    <string name="not_now">Not now</string>
+    <string name="downloading_pct">Downloading… %1$d%%</string>
+    <string name="downloaded_text">Downloaded. Tap Install. The first time, Android asks you to allow Offers Hub to install updates.</string>
+    <string name="whats_new">What\'s new</string>
+    <string name="download">Download</string>
+    <string name="install">Install</string>
+    <string name="later">Later</string>
+    <string name="download_failed">Download failed</string>
 </resources>

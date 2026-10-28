@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -35,18 +36,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,10 +77,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.offershub.app.R
 import com.offershub.app.data.AppSettings
 import com.offershub.app.data.Offer
 import com.offershub.app.data.SortOrder
@@ -125,16 +132,19 @@ fun OffersApp(vm: OffersViewModel, settings: AppSettings) {
 fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
-    var selected by remember { mutableStateOf<Offer?>(null) }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
+    val showHot = !state.showSaved && !state.filtering && state.sort == SortOrder.Latest && state.hot.isNotEmpty()
 
-    // A tapped notification opens its deal once the feed has it.
+    if (state.showSaved) BackHandler { vm.setShowSaved(false) }
+
+    // A tapped notification or widget row opens its deal once the feed has it.
     LaunchedEffect(state.pendingOpenId, state.all) {
         val id = state.pendingOpenId ?: return@LaunchedEffect
-        state.all.firstOrNull { it.id == id }?.let {
-            selected = it
+        if (state.all.any { it.id == id }) {
+            selectedId = id
             vm.consumePendingOpen()
         }
     }
@@ -143,11 +153,23 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
             .distinctUntilChanged()
             .collect(vm::setAtTop)
     }
+    // Load older deals near the end of the list.
+    LaunchedEffect(gridState, state.offers.size) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .distinctUntilChanged()
+            .collect { last -> if (last >= gridState.layoutInfo.totalItemsCount - 8) vm.loadMore() }
+    }
+    // A filter that matches few of the loaded deals pulls in older ones too.
+    LaunchedEffect(state.filtering, state.offers.size, state.endReached, state.loadingMore) {
+        if (state.filtering && state.offers.size < 20 && !state.endReached && !state.loadingMore) vm.loadMore()
+    }
     // Stay pinned to the newest deal while the user is at the top.
     LaunchedEffect(state.offers.firstOrNull()?.id) {
         if (state.unseenNew == 0 && gridState.firstVisibleItemIndex <= 1) gridState.scrollToItem(0)
     }
-    LaunchedEffect(state.selectedStore, state.sort, state.query) { gridState.scrollToItem(0) }
+    LaunchedEffect(state.selectedStore, state.selectedCategory, state.sort, state.query, state.showSaved) {
+        gridState.scrollToItem(0)
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -155,15 +177,34 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
         topBar = {
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 TopAppBar(
+                    navigationIcon = {
+                        if (state.showSaved) {
+                            IconButton(onClick = { vm.setShowSaved(false) }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.cd_back))
+                            }
+                        }
+                    },
                     title = {
-                        Column {
-                            Text("Offers Hub", style = MaterialTheme.typography.headlineSmall)
-                            StatusLine(state.status, state.all.size)
+                        if (state.showSaved) {
+                            Text(stringResource(R.string.saved_title), style = MaterialTheme.typography.headlineSmall)
+                        } else {
+                            Column {
+                                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
+                                StatusLine(state.status, state.all.size)
+                            }
                         }
                     },
                     actions = {
+                        if (!state.showSaved) {
+                            IconButton(onClick = { vm.setShowSaved(true) }) {
+                                Icon(
+                                    if (state.saved.isEmpty()) Icons.Filled.FavoriteBorder else Icons.Filled.Favorite,
+                                    contentDescription = stringResource(R.string.cd_saved),
+                                )
+                            }
+                        }
                         IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+                            Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.cd_settings))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -176,6 +217,7 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
                     UpdateBanner(it.update.version, onUpdate = onOpenUpdate, onDismiss = vm::dismissUpdate)
                 }
                 SearchField(state.query, vm::setQuery)
+                CategoryRow(state, vm::selectCategory)
                 FilterRow(state, vm::selectStore, vm::setSort)
             }
         },
@@ -186,17 +228,19 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when {
-                state.loading -> LoadingGrid()
-                state.status == FeedStatus.Error && state.all.isEmpty() ->
-                    MessageState("Couldn't load deals", state.error ?: "Check your connection.", "Try again", vm::refresh)
-                state.offers.isEmpty() -> {
-                    val filtered = state.query.isNotBlank() || state.selectedStore != null
-                    MessageState(
-                        if (filtered) "No deals match" else "No deals yet",
-                        if (filtered) "Try another search or store." else "New deals appear here the moment they're posted.",
-                        if (filtered) "Clear filters" else null,
-                    ) { vm.setQuery(""); vm.selectStore(null) }
-                }
+                state.loading && !state.showSaved -> LoadingGrid()
+                state.status == FeedStatus.Error && state.all.isEmpty() && !state.showSaved ->
+                    MessageState(stringResource(R.string.error_title), state.error ?: stringResource(R.string.error_body),
+                        stringResource(R.string.try_again), vm::refresh)
+                state.offers.isEmpty() && state.showSaved && !state.filtering ->
+                    MessageState(stringResource(R.string.saved_empty_title), stringResource(R.string.saved_empty_body), null) {}
+                state.offers.isEmpty() && state.filtering && (state.endReached || state.showSaved) ->
+                    MessageState(stringResource(R.string.no_match_title), stringResource(R.string.no_match_body),
+                        stringResource(R.string.clear_filters)) {
+                        vm.setQuery(""); vm.selectStore(null); vm.selectCategory(null)
+                    }
+                state.offers.isEmpty() && !state.filtering ->
+                    MessageState(stringResource(R.string.no_deals_title), stringResource(R.string.no_deals_body), null) {}
                 else -> LazyVerticalGrid(
                     // 140dp keeps two columns on phones even at a large display size.
                     columns = GridCells.Adaptive(minSize = 140.dp),
@@ -206,14 +250,32 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    if (showHot) {
+                        item(key = "hot", span = { GridItemSpan(maxLineSpan) }) {
+                            HotRow(state.hot, onOpen = { selectedId = it.id })
+                        }
+                    }
                     items(state.offers, key = { it.id }) { offer ->
-                        OfferCard(offer, onClick = { selected = offer }, modifier = Modifier.animateItem())
+                        OfferCard(
+                            offer,
+                            saved = offer.id in state.savedIds,
+                            onToggleSave = { vm.toggleSaved(offer) },
+                            onClick = { selectedId = offer.id },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                    if (state.loadingMore) {
+                        item(key = "more", span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) {
+                                CircularProgressIndicator(Modifier.size(28.dp))
+                            }
+                        }
                     }
                 }
             }
 
             AnimatedVisibility(
-                visible = state.unseenNew > 0,
+                visible = state.unseenNew > 0 && !state.showSaved,
                 enter = slideInVertically { -it } + fadeIn(),
                 exit = slideOutVertically { -it } + fadeOut(),
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
@@ -228,7 +290,7 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.KeyboardArrowUp, null, Modifier.size(18.dp))
                         Text(
-                            if (state.unseenNew == 1) "1 new deal" else "${state.unseenNew} new deals",
+                            pluralStringResource(R.plurals.new_deals_count, state.unseenNew, state.unseenNew),
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(start = 4.dp),
                         )
@@ -238,16 +300,39 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
         }
     }
 
-    selected?.let { offer -> OfferDetailSheet(offer, onDismiss = { selected = null }) }
+    // Looked up by id so the sheet follows live changes (e.g. the deal being marked as ended).
+    val selected = selectedId?.let { id -> state.all.firstOrNull { it.id == id } ?: state.saved.firstOrNull { it.id == id } }
+    selected?.let { offer ->
+        OfferDetailSheet(
+            offer,
+            saved = offer.id in state.savedIds,
+            onToggleSave = { vm.toggleSaved(offer) },
+            onDismiss = { selectedId = null },
+        )
+    }
+}
+
+@Composable
+private fun HotRow(deals: List<Offer>, onOpen: (Offer) -> Unit) {
+    Column(Modifier.padding(bottom = 4.dp)) {
+        Text(
+            stringResource(R.string.hot_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(deals, key = { "hot_" + it.id }) { HotCard(it, onClick = { onOpen(it) }) }
+        }
+    }
 }
 
 @Composable
 private fun StatusLine(status: FeedStatus, count: Int) {
     val (color, text) = when (status) {
-        FeedStatus.Live -> LiveGreen to "Live · $count deals"
-        FeedStatus.Offline -> Color(0xFFE09B23) to "Offline · showing saved deals"
-        FeedStatus.Connecting -> MaterialTheme.colorScheme.outline to "Connecting…"
-        FeedStatus.Error -> MaterialTheme.colorScheme.error to "Can't reach the server"
+        FeedStatus.Live -> LiveGreen to stringResource(R.string.status_live, count)
+        FeedStatus.Offline -> Color(0xFFE09B23) to stringResource(R.string.status_offline)
+        FeedStatus.Connecting -> MaterialTheme.colorScheme.outline to stringResource(R.string.status_connecting)
+        FeedStatus.Error -> MaterialTheme.colorScheme.error to stringResource(R.string.status_error)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
@@ -265,11 +350,13 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
     TextField(
         value = query,
         onValueChange = onQuery,
-        placeholder = { Text("Search deals, brands, products", maxLines = 1) },
+        placeholder = { Text(stringResource(R.string.search_hint), maxLines = 1) },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
-                IconButton(onClick = { onQuery("") }) { Icon(Icons.Filled.Clear, contentDescription = "Clear search") }
+                IconButton(onClick = { onQuery("") }) {
+                    Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.cd_clear_search))
+                }
             }
         },
         singleLine = true,
@@ -286,8 +373,31 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
 }
 
 @Composable
+private fun CategoryRow(state: OffersUiState, onCategory: (String?) -> Unit) {
+    if (state.categories.isEmpty()) return
+    LazyRow(
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(state.categories, key = { "cat_" + it.name }) { cat ->
+            val selected = state.selectedCategory == cat.name
+            FilterChip(
+                selected = selected,
+                onClick = { onCategory(if (selected) null else cat.name) },
+                label = { Text("${categoryEmoji(cat.name)} ${categoryName(cat.name)}", maxLines = 1) },
+            )
+        }
+    }
+}
+
+@Composable
 private fun FilterRow(state: OffersUiState, onStore: (String?) -> Unit, onSort: (SortOrder) -> Unit) {
     var sortMenu by remember { mutableStateOf(false) }
+    val sortLabels = mapOf(
+        SortOrder.Latest to stringResource(R.string.sort_latest),
+        SortOrder.Discount to stringResource(R.string.sort_discount),
+        SortOrder.Price to stringResource(R.string.sort_price),
+    )
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -297,13 +407,13 @@ private fun FilterRow(state: OffersUiState, onStore: (String?) -> Unit, onSort: 
                 FilterChip(
                     selected = state.sort != SortOrder.Latest,
                     onClick = { sortMenu = true },
-                    label = { Text(state.sort.label) },
+                    label = { Text(sortLabels.getValue(state.sort), maxLines = 1) },
                     trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) },
                 )
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
                     SortOrder.entries.forEach { sort ->
                         DropdownMenuItem(
-                            text = { Text(sort.label) },
+                            text = { Text(sortLabels.getValue(sort)) },
                             leadingIcon = { if (sort == state.sort) Icon(Icons.Filled.Check, null) },
                             onClick = { sortMenu = false; onSort(sort) },
                         )
@@ -312,17 +422,23 @@ private fun FilterRow(state: OffersUiState, onStore: (String?) -> Unit, onSort: 
             }
         }
         item {
-            FilterChip(selected = state.selectedStore == null, onClick = { onStore(null) }, label = { Text("All") })
+            FilterChip(
+                selected = state.selectedStore == null,
+                onClick = { onStore(null) },
+                label = { Text(stringResource(R.string.filter_all), maxLines = 1) },
+            )
         }
         items(state.stores, key = { it.name }) { store ->
             FilterChip(
                 selected = state.selectedStore == store.name,
                 onClick = { onStore(if (state.selectedStore == store.name) null else store.name) },
-                label = { Text("${if (store.name == "Other") "More" else store.name} · ${store.count}") },
-                leadingIcon = {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(storeColor(store.name)))
+                label = {
+                    Text(
+                        "${if (store.name == "Other") stringResource(R.string.filter_more) else store.name} · ${store.count}",
+                        maxLines = 1,
+                    )
                 },
-                colors = FilterChipDefaults.filterChipColors(),
+                leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(storeColor(store.name))) },
             )
         }
     }
@@ -382,7 +498,7 @@ private fun MessageState(title: String, body: String, action: String?, onAction:
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
+                Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                 Text(
                     body,
                     style = MaterialTheme.typography.bodyMedium,

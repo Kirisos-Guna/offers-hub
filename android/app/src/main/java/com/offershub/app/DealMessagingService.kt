@@ -13,12 +13,15 @@ class DealMessagingService : FirebaseMessagingService() {
         val id = data["id"] ?: return
         val url = data["url"] ?: return
         val discount = data["discount"]?.toIntOrNull()
-        // On screen, the live feed already shows it; otherwise respect the user's filter.
-        if (AppVisibility.foreground || !AppSettings.get(this).wantsNotification(discount)) return
+        val title = data["title"].orEmpty()
+        val text = data["text"].orEmpty()
+        WidgetData.addLatest(this, data)
+        // On screen, the live feed already shows it; otherwise respect the user's filters.
+        if (AppVisibility.foreground || !AppSettings.get(this).wantsNotification(discount, title, text)) return
 
         val alert = DealAlert(
             id = id,
-            title = data["title"].orEmpty().ifEmpty { "New deal" },
+            title = title.ifEmpty { getString(R.string.notif_new_deal) },
             store = data["store"].orEmpty(),
             price = data["price"]?.toDoubleOrNull(),
             mrp = data["mrp"]?.toDoubleOrNull(),
