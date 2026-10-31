@@ -82,14 +82,17 @@ async def _store_from_redirect(url: str) -> str | None:
         if resp.status_code >= 400:
             resp = await _http.get(url)
         return store_for_url(str(resp.url))
-    except httpx.HTTPError:
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError):
         return None
 
 
 def _shrink(data: bytes) -> bytes:
     """Re-encodes a post photo at card size (~30 KB instead of ~150 KB)."""
-    with Image.open(io.BytesIO(data)) as img:
-        img = img.convert("RGB")
+    with Image.open(io.BytesIO(data)) as source:
+        # Transparent product images go on white, not on JPEG's default black.
+        rgba = source.convert("RGBA")
+        img = Image.new("RGB", rgba.size, "white")
+        img.paste(rgba, mask=rgba.getchannel("A"))
         if img.width > IMAGE_MAX_WIDTH:
             img = img.resize((IMAGE_MAX_WIDTH, round(img.height * IMAGE_MAX_WIDTH / img.width)))
         out = io.BytesIO()
@@ -139,12 +142,14 @@ async def handle_message(message, channel_title: str, on_saved=None) -> None:
     posted_at = int(message.date.timestamp())
     if db.upsert_offer(source_key, channel_title, offer, posted_at, image):
         log.info("[%s] %s | %s | %s", channel_title, offer["store"], offer["price"], offer["title"][:60])
-        needs_lookup = image is None or offer["weak_title"]
-        if on_saved and needs_lookup:
+        # From the saved deal, not this post: an edited post must not redo (or undo, when the
+        # lookup fails this time) the picture and name an earlier lookup found.
+        row = db.get_offer(source_key)
+        need_image, need_title = row["image"] is None, row["weak_title"] == 1
+        if on_saved and (need_image or need_title):
             await on_saved(source_key, False)  # show it now; the lookup can take a few seconds
-        if needs_lookup:
-            await enrich_from_link(source_key, offer["links"], need_image=image is None,
-                                   need_title=offer["weak_title"])
+        if need_image or need_title:
+            await enrich_from_link(source_key, offer["links"], need_image, need_title)
         if on_saved:
             await on_saved(source_key, True)
 
@@ -222,7 +227,10 @@ async def sync_channel(client: TelegramClient, link: str, chat, on_saved=None) -
     async for message in client.iter_messages(chat, **kwargs):
         newest = max(newest, message.id)
         if not db.has_offer(f"tg:{message.chat_id}:{message.id}"):
-            await handle_message(message, chat.title, on_saved)
+            try:
+                await handle_message(message, chat.title, on_saved)
+            except Exception:  # one bad post must not stop this channel's sync on every pass
+                log.exception("skipping post %s of %s", message.id, chat.title)
         count += 1
     db.save_channel(link, utils.get_peer_id(chat), chat.title, newest)
     if count:

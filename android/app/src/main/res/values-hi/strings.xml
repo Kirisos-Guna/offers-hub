@@ -1,7 +1,7 @@
 <resources>
     <!-- Feed -->
     <string name="search_hint">डील, ब्रांड, प्रोडक्ट खोजें</string>
-    <string name="status_live">लाइव · %1$d डील</string>
+    <string name="status_live">लाइव</string>
     <string name="status_offline">ऑफ़लाइन · सेव की गई डील</string>
     <string name="status_connecting">कनेक्ट हो रहा है…</string>
     <string name="status_error">सर्वर से संपर्क नहीं हो पा रहा</string>
@@ -50,6 +50,7 @@
     <string name="share_image">इमेज के रूप में शेयर करें</string>
     <string name="share_footer">Offers Hub · लाइव डील</string>
     <string name="original_post">मूल पोस्ट</string>
+    <string name="share_failed">यह डील शेयर नहीं हो सकी</string>
     <string name="no_app">इस लिंक को खोलने के लिए कोई ऐप नहीं है</string>
 
     <!-- Categories -->
@@ -87,6 +88,7 @@
     <string name="section_notifications">सूचनाएँ</string>
     <string name="alerts_title">नई डील की सूचना</string>
     <string name="alerts_desc">डील पोस्ट होते ही सूचना</string>
+    <string name="notif_blocked">Android में Offers Hub की सूचनाएँ बंद हैं। चालू करने के लिए नीचे दबाएँ।</string>
     <string name="alert_for">किसके लिए सूचना दें</string>
     <string name="alert_all">हर डील</string>
     <string name="alert_keywords">मेरे कीवर्ड</string>
@@ -108,7 +110,6 @@
     <string name="check_updates">अपडेट जाँचें</string>
     <string name="update_check_failed">अपडेट की जाँच नहीं हो सकी</string>
     <string name="section_about">ऐप के बारे में</string>
-    <string name="deals_now">अभी की डील</string>
     <string name="about_text">टेलीग्राम डील चैनलों पर पोस्ट होते ही डील यहाँ आती हैं। Offers Hub को किसी अकाउंट की ज़रूरत नहीं और यह आपको ट्रैक नहीं करता। खरीदारी दुकान के अपने ऐप या साइट पर होती है।</string>
 
     <!-- In-app update -->

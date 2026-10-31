@@ -30,8 +30,11 @@ interface FeedSource {
     /** The newest deals; emits again whenever they change. */
     fun feed(): Flow<FeedEvent>
 
-    /** Up to [limit] deals posted before [beforePostedAt], newest first (scrolling further). */
+    /** Up to [limit] deals posted up to [beforePostedAt], newest first (scrolling further). */
     suspend fun older(beforePostedAt: Long, limit: Int): List<Offer>
+
+    /** One deal by id, however old (a tapped notification), or null if it is gone. */
+    suspend fun offer(id: String): Offer?
 
     companion object {
         /** Firestore (instant) when the app was built with Firebase settings, else the static feed. */
@@ -71,7 +74,8 @@ class FirestoreFeed : FeedSource {
     override suspend fun older(beforePostedAt: Long, limit: Int): List<Offer> =
         suspendCancellableCoroutine { cont ->
             offers.orderBy("posted_at", Query.Direction.DESCENDING)
-                .whereLessThan("posted_at", beforePostedAt)
+                // "Or equal": another deal can share the last one's second; duplicates are merged.
+                .whereLessThanOrEqualTo("posted_at", beforePostedAt)
                 .limit(limit.toLong())
                 .get()
                 .addOnSuccessListener { snap ->
@@ -79,6 +83,12 @@ class FirestoreFeed : FeedSource {
                 }
                 .addOnFailureListener { cont.resumeWithException(it) }
         }
+
+    override suspend fun offer(id: String): Offer? = suspendCancellableCoroutine { cont ->
+        offers.document(id).get()
+            .addOnSuccessListener { doc -> cont.resume(doc.data?.let { firestoreOffer(doc.id, it) }) }
+            .addOnFailureListener { cont.resumeWithException(it) }
+    }
 
     private companion object {
         const val LIVE_PAGE = 60L
@@ -103,6 +113,8 @@ class StaticFeed(baseUrl: String = DEFAULT_URL) : FeedSource {
     }
 
     override suspend fun older(beforePostedAt: Long, limit: Int): List<Offer> = emptyList()
+
+    override suspend fun offer(id: String): Offer? = fetch().firstOrNull { it.id == id }
 
     suspend fun fetch(): List<Offer> = withContext(Dispatchers.IO) {
         // The query string skips GitHub Pages' 10-minute cache.

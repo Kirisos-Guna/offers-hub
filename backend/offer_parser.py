@@ -41,26 +41,37 @@ IGNORED_HOSTS = ("t.me", "telegram.me", "telegram.org", "youtube.com", "youtu.be
                  "whatsapp.com", "wa.me", "chat.whatsapp.com")
 
 _NUM = r"(\d{1,3}(?:,\d{2,3})+|\d+)"
-# A price follows ₹/Rs/at/@/starts/loot/from - but not a discount ("72% Off", "Flat ₹8000 Off").
+# A price follows ₹/Rs/at/@/starts/loot/from - but not an amount off ("72% Off", "Flat ₹8000 Off",
+# "₹200 Coupon", "₹500 Cashback"). "Rs" must be a whole word: "Stickers 100 pcs" has no price.
 # A bare number is a price only when it is alone on its line before the link ("199 https://...",
 # "₹99/- :"), not a size like "5 - 10L Geyser : https://...". Links are removed before matching.
 PRICE_RE = re.compile(
-    r"(?:₹|rs\.?|inr|\bat\b|@|\bstarts?\s*(?:at|@|from)?|\bloot\b|\bfrom\b)\s*₹?\s*"
-    + _NUM + r"(?:\.\d{1,2})?(?![\d,.]*\s*(?:%|off\b))"
+    r"(?:₹|\brs\b\.?|\binr\b|\bat\b|@|\bstarts?\s*(?:at|@|from)?|\bloot\b|\bfrom\b)\s*₹?\s*"
+    + _NUM + r"(?:\.\d{1,2})?(?![\d,.]*\s*(?:%|off\b|coupon|cash\s*back|discount|voucher|bonus|back\b))"
     + r"|^[ \t]*₹?[ \t]*" + _NUM + r"(?=[ \t]*(?:/-)?[ \t]*:?[ \t]*$)",
     re.IGNORECASE | re.MULTILINE,
 )
 
 
+# Words before an amount that make it a saving rather than the price: "Save ₹200", "Extra ₹500".
+NOT_PRICE_BEFORE_RE = re.compile(r"\b(?:save|extra|additional)\s*$", re.IGNORECASE)
+
+
 def _price_of(match: re.Match) -> str:
     return match.group(1) or match.group(2)
+
+
+def _prices(body: str) -> list[re.Match]:
+    return [m for m in PRICE_RE.finditer(body) if not NOT_PRICE_BEFORE_RE.search(body[:m.start()])]
+
+
 # Titles that are only a price or a promo word: the product is only in the post's photo.
 WEAK_TITLE_RE = re.compile(
     r"(?:(?:big\s+)?loot|grab|deal|lowest|flat|upto|price\s+drop|offer|from|starts?|at|bank|\+|[₹\d,.\s])*",
     re.IGNORECASE,
 )
 MRP_RE = re.compile(r"\bmrp\s*[:\-]?\s*(?:₹|rs\.?)?\s*(\d{1,3}(?:,\d{2,3})+|\d+)", re.IGNORECASE)
-DISCOUNT_RE = re.compile(r"(\d{1,2})\s*%\s*off", re.IGNORECASE)
+DISCOUNT_RE = re.compile(r"(?<!\d)(\d{1,3})\s*%\s*off", re.IGNORECASE)
 # "GRAB : ..."  "Loot : ..."  "72% Off : ..."
 TAG_RE = re.compile(r"^\s*([^:\n]{2,24}?)\s*:\s+(?!//)")
 TITLE_TAIL_RE = re.compile(
@@ -81,8 +92,21 @@ def is_weak_title(title: str) -> bool:
     return WEAK_TITLE_RE.fullmatch(title.strip()) is not None
 
 
+def _host(url: str) -> str:
+    """The URL's host in lower case; "" for text that only looks like a URL ("https://[x")."""
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def _is_notice(line: str) -> bool:
+    """A channel's status line added by an edit ("Edit - Over Now ❌"), not the deal itself."""
+    return len(line) <= 40 and not URL_RE.search(line) and EXPIRED_RE.search(line) is not None
+
+
 def store_for_url(url: str) -> str | None:
-    host = (urlparse(url).hostname or "").lower()
+    host = _host(url)
     if host.startswith("www."):
         host = host[4:]
     if "redirectAmzASIN" in url:
@@ -94,7 +118,7 @@ def store_for_url(url: str) -> str | None:
 
 
 def is_shop_link(url: str) -> bool:
-    host = (urlparse(url).hostname or "").lower()
+    host = _host(url)
     return bool(host) and not any(host == h or host.endswith("." + h) for h in IGNORED_HOSTS)
 
 
@@ -146,7 +170,8 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
     if not text or not links:
         return None
 
-    first_line = next((l.strip() for l in text.splitlines() if l.strip()), "")
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    first_line = next((l for l in lines if not _is_notice(l)), lines[0])
     tag = None
     m = TAG_RE.match(first_line)
     # "GRAB :" is a tag; "1436 :" or "₹50 :" before a link is a price label, not a tag.
@@ -162,22 +187,20 @@ def parse_offer(text: str, extra_urls: list[str] | None = None) -> dict | None:
         title = TITLE_TAIL_RE.sub("", URL_RE.split(title)[0]).strip(" .:-–|*") or "Deal"
 
     body_wo_urls = URL_RE.sub(" ", text)
-    price = None
-    pm = PRICE_RE.search(body_wo_urls)
-    if pm:
-        price = _to_number(_price_of(pm))
+    prices = _prices(body_wo_urls)
+    price = _to_number(_price_of(prices[0])) if prices else None
     mrp = None
     mm = MRP_RE.search(body_wo_urls)
     if mm:
         mrp = _to_number(mm.group(1))
         if price == mrp:  # the price regex caught the MRP; look for another number
-            others = [p for p in PRICE_RE.finditer(body_wo_urls) if _to_number(_price_of(p)) != mrp]
+            others = [p for p in prices if _to_number(_price_of(p)) != mrp]
             price = _to_number(_price_of(others[0])) if others else None
 
     discount = None
     dm = DISCOUNT_RE.search(text)
     if dm:
-        discount = int(dm.group(1))
+        discount = min(int(dm.group(1)), 100)
     elif price and mrp and mrp > price:
         discount = round((1 - price / mrp) * 100)
 

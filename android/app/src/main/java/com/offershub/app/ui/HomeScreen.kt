@@ -28,12 +28,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -54,6 +56,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -77,6 +80,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -89,7 +93,9 @@ import com.offershub.app.data.Offer
 import com.offershub.app.data.SortOrder
 import com.offershub.app.ui.theme.LiveGreen
 import com.offershub.app.ui.theme.storeColor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** Root of the UI: the deal feed, with settings as a second screen. */
@@ -98,12 +104,13 @@ fun OffersApp(vm: OffersViewModel, settings: AppSettings) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showUpdate by rememberSaveable { mutableStateOf(false) }
     val update by vm.update.collectAsStateWithLifecycle()
+    // Kept here so coming back from Settings returns to the same place in the list.
+    val gridState = rememberLazyGridState()
 
     if (showSettings) {
         BackHandler { showSettings = false }
         SettingsScreen(
             settings,
-            dealCount = vm.state.collectAsStateWithLifecycle().value.all.size,
             update = update,
             installedVersion = vm.updater.installedVersion(),
             onCheckUpdate = { vm.checkForUpdate(manual = true) },
@@ -111,7 +118,7 @@ fun OffersApp(vm: OffersViewModel, settings: AppSettings) {
             onBack = { showSettings = false; vm.clearUpdateMessage() },
         )
     } else {
-        HomeScreen(vm, onOpenSettings = { showSettings = true }, onOpenUpdate = { showUpdate = true })
+        HomeScreen(vm, gridState, onOpenSettings = { showSettings = true }, onOpenUpdate = { showUpdate = true })
     }
 
     val inProgress = update is UpdateState.Downloading || update is UpdateState.Ready
@@ -129,21 +136,20 @@ fun OffersApp(vm: OffersViewModel, settings: AppSettings) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: () -> Unit) {
+fun HomeScreen(vm: OffersViewModel, gridState: LazyGridState, onOpenSettings: () -> Unit, onOpenUpdate: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val showHot = !state.showSaved && !state.filtering && state.sort == SortOrder.Latest && state.hot.isNotEmpty()
 
     if (state.showSaved) BackHandler { vm.setShowSaved(false) }
 
     // A tapped notification or widget row opens its deal once the feed has it.
-    LaunchedEffect(state.pendingOpenId, state.all) {
+    LaunchedEffect(state.pendingOpenId, state.all, state.fetchedDeal) {
         val id = state.pendingOpenId ?: return@LaunchedEffect
-        if (state.all.any { it.id == id }) {
+        if (state.all.any { it.id == id } || state.fetchedDeal?.id == id) {
             selectedId = id
             vm.consumePendingOpen()
         }
@@ -153,22 +159,28 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
             .distinctUntilChanged()
             .collect(vm::setAtTop)
     }
-    // Load older deals near the end of the list.
-    LaunchedEffect(gridState, state.offers.size) {
+    // Load older deals near the end of the list. Under a filter the list can be short with nothing
+    // scrolled, so loading is left to the effect below and the "load more" button.
+    LaunchedEffect(gridState, state.offers.size, state.filtering) {
+        if (state.filtering) return@LaunchedEffect
         snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .distinctUntilChanged()
             .collect { last -> if (last >= gridState.layoutInfo.totalItemsCount - 8) vm.loadMore() }
     }
-    // A filter that matches few of the loaded deals pulls in older ones too.
-    LaunchedEffect(state.filtering, state.offers.size, state.endReached, state.loadingMore) {
-        if (state.filtering && state.offers.size < 20 && !state.endReached && !state.loadingMore) vm.loadMore()
+    // A filter that matches few of the loaded deals pulls in a few more pages, once typing stops.
+    LaunchedEffect(state.query, state.selectedStore, state.selectedCategory) {
+        delay(500)
+        vm.loadMoreForFilter()
     }
     // Stay pinned to the newest deal while the user is at the top.
     LaunchedEffect(state.offers.firstOrNull()?.id) {
         if (state.unseenNew == 0 && gridState.firstVisibleItemIndex <= 1) gridState.scrollToItem(0)
     }
-    LaunchedEffect(state.selectedStore, state.selectedCategory, state.sort, state.query, state.showSaved) {
-        gridState.scrollToItem(0)
+    // Back to the top when the list changes, but not when returning from Settings.
+    LaunchedEffect(Unit) {
+        snapshotFlow { listOf(state.selectedStore, state.selectedCategory, state.sort, state.query, state.showSaved) }
+            .drop(1)
+            .collect { gridState.scrollToItem(0) }
     }
 
     Scaffold(
@@ -190,7 +202,7 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
                         } else {
                             Column {
                                 Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
-                                StatusLine(state.status, state.all.size)
+                                StatusLine(state.status)
                             }
                         }
                     },
@@ -230,7 +242,7 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
             when {
                 state.loading && !state.showSaved -> LoadingGrid()
                 state.status == FeedStatus.Error && state.all.isEmpty() && !state.showSaved ->
-                    MessageState(stringResource(R.string.error_title), state.error ?: stringResource(R.string.error_body),
+                    MessageState(stringResource(R.string.error_title), stringResource(R.string.error_body),
                         stringResource(R.string.try_again), vm::refresh)
                 state.offers.isEmpty() && state.showSaved && !state.filtering ->
                     MessageState(stringResource(R.string.saved_empty_title), stringResource(R.string.saved_empty_body), null) {}
@@ -270,6 +282,12 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
                                 CircularProgressIndicator(Modifier.size(28.dp))
                             }
                         }
+                    } else if (state.filtering && !state.showSaved && !state.endReached) {
+                        item(key = "load_more", span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().padding(8.dp), Alignment.Center) {
+                                OutlinedButton(onClick = vm::loadMore) { Text(stringResource(R.string.load_more)) }
+                            }
+                        }
                     }
                 }
             }
@@ -301,7 +319,10 @@ fun HomeScreen(vm: OffersViewModel, onOpenSettings: () -> Unit, onOpenUpdate: ()
     }
 
     // Looked up by id so the sheet follows live changes (e.g. the deal being marked as ended).
-    val selected = selectedId?.let { id -> state.all.firstOrNull { it.id == id } ?: state.saved.firstOrNull { it.id == id } }
+    val selected = selectedId?.let { id ->
+        state.all.firstOrNull { it.id == id } ?: state.saved.firstOrNull { it.id == id }
+            ?: state.fetchedDeal?.takeIf { it.id == id }
+    }
     selected?.let { offer ->
         OfferDetailSheet(
             offer,
@@ -327,9 +348,9 @@ private fun HotRow(deals: List<Offer>, onOpen: (Offer) -> Unit) {
 }
 
 @Composable
-private fun StatusLine(status: FeedStatus, count: Int) {
+private fun StatusLine(status: FeedStatus) {
     val (color, text) = when (status) {
-        FeedStatus.Live -> LiveGreen to stringResource(R.string.status_live, count)
+        FeedStatus.Live -> LiveGreen to stringResource(R.string.status_live)
         FeedStatus.Offline -> Color(0xFFE09B23) to stringResource(R.string.status_offline)
         FeedStatus.Connecting -> MaterialTheme.colorScheme.outline to stringResource(R.string.status_connecting)
         FeedStatus.Error -> MaterialTheme.colorScheme.error to stringResource(R.string.status_error)
@@ -347,6 +368,7 @@ private fun StatusLine(status: FeedStatus, count: Int) {
 
 @Composable
 private fun SearchField(query: String, onQuery: (String) -> Unit) {
+    val keyboard = LocalSoftwareKeyboardController.current
     TextField(
         value = query,
         onValueChange = onQuery,
@@ -362,6 +384,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
         singleLine = true,
         shape = RoundedCornerShape(50),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -433,10 +456,7 @@ private fun FilterRow(state: OffersUiState, onStore: (String?) -> Unit, onSort: 
                 selected = state.selectedStore == store.name,
                 onClick = { onStore(if (state.selectedStore == store.name) null else store.name) },
                 label = {
-                    Text(
-                        "${if (store.name == "Other") stringResource(R.string.filter_more) else store.name} · ${store.count}",
-                        maxLines = 1,
-                    )
+                    Text(if (store.name == "Other") stringResource(R.string.filter_more) else store.name, maxLines = 1)
                 },
                 leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(storeColor(store.name))) },
             )

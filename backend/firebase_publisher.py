@@ -27,6 +27,7 @@ COLLECTION = "offers"
 TOPIC = "deals"
 # Deals posted longer ago than this are published but not announced (catch-up after a restart).
 NOTIFY_WITHIN_SECONDS = 15 * 60
+NOTIFY_ATTEMPTS = 3
 
 
 def doc_id(source_key: str) -> str:
@@ -115,8 +116,15 @@ class Publisher:
             data=data,
             android=self._messaging.AndroidConfig(priority="high", ttl=timedelta(hours=2)),
         )
-        self._messaging.send(message)
-        log.info("notified: %s", doc["title"][:60])
+        for attempt in range(NOTIFY_ATTEMPTS):  # a dropped request must not cost the user a deal
+            try:
+                self._messaging.send(message)
+                log.info("notified: %s", doc["title"][:60])
+                return
+            except Exception:
+                if attempt == NOTIFY_ATTEMPTS - 1:
+                    raise
+                time.sleep(2 * (attempt + 1))
 
     def _delete(self, key: str) -> None:
         self._fs.collection(COLLECTION).document(doc_id(key)).delete()
@@ -160,11 +168,15 @@ class Publisher:
             if row is None:
                 return
             try:
-                doc, _ = await asyncio.to_thread(self._publish_row, row, db.published_state().get(source_key))
-                if notify:
-                    await asyncio.to_thread(self._notify, source_key, doc)
+                await asyncio.to_thread(self._publish_row, row, db.published_state().get(source_key))
             except Exception:
                 log.exception("publishing %s failed", source_key)
+                db.set_published(source_key, "", None)  # the next full_sync writes it
+            if notify:  # the alert still goes out; a feed hiccup shouldn't cost it
+                try:
+                    await asyncio.to_thread(self._notify, source_key, self._document(row))
+                except Exception:
+                    log.exception("notifying %s failed", source_key)
 
     async def remove(self, source_keys: list[str]) -> None:
         async with self._lock:
@@ -181,23 +193,25 @@ class Publisher:
 
     async def full_sync(self) -> None:
         """Brings Firebase in line with the database: writes changed deals, deletes gone ones."""
-        async with self._lock:
-            states = db.published_state()
-            rows = db.all_offer_rows()
-            written = 0
-            for row in rows:
+        states = db.published_state()
+        rows = db.all_offer_rows()
+        written = 0
+        # The lock is taken per deal: a long sync must not hold back new deals and their alerts.
+        for row in rows:
+            async with self._lock:
                 try:
                     _, changed = await asyncio.to_thread(self._publish_row, row, states.get(row["source_key"]))
                     written += changed
                 except Exception:
                     log.exception("publishing %s failed", row["source_key"])
-            live = {row["source_key"] for row in rows}
-            gone = [key for key in states if key not in live]
-            for key in gone:
+        live = {row["source_key"] for row in rows}
+        gone = [key for key in states if key not in live]
+        for key in gone:
+            async with self._lock:
                 try:
                     await asyncio.to_thread(self._delete, key)
                 except Exception:
                     log.exception("deleting %s failed", key)
-            if written or gone:
-                log.info("firebase sync: %d written, %d deleted, %d live", written, len(gone), len(live))
+        if written or gone:
+            log.info("firebase sync: %d written, %d deleted, %d live", written, len(gone), len(live))
         await self.save_channels()

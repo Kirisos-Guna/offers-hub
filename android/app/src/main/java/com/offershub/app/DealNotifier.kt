@@ -69,13 +69,13 @@ object DealNotifier {
             deal.mrp?.takeIf { deal.price != null && it > deal.price }?.let { "MRP ${formatPrice(it)}" },
             deal.discount?.let { context.getString(R.string.percent_off, it) },
             deal.store.takeIf { it != "Other" },
-        ).joinToString(" · ")
+        ).joinToString(" · ").ifEmpty { context.getString(R.string.notif_new_deal) }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.notification_accent))
             .setContentTitle(deal.title)
-            .setContentText(details.ifEmpty { context.getString(R.string.notif_new_deal) })
+            .setContentText(details)
             .setContentIntent(open)
             .addAction(0, context.getString(R.string.notif_buy_now), buy)
             .setAutoCancel(true)

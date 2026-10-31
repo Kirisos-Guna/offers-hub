@@ -58,7 +58,7 @@ private fun drawCard(context: Context, offer: Offer, product: Bitmap?): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     // Product picture on a white panel.
-    val panel = RectF(60f, 60f, W - 60f, 820f)
+    val panel = RectF(60f, 60f, W - 60f, 750f)
     paint.color = Color.WHITE
     c.drawRoundRect(panel, 48f, 48f, paint)
     if (product != null) {
@@ -77,7 +77,7 @@ private fun drawCard(context: Context, offer: Offer, product: Bitmap?): Bitmap {
     }
     offer.discount?.let { pill(c, context.getString(R.string.percent_off_caps, it), 100f, 100f, Color.parseColor("#D32F2F")) }
 
-    var y = 870f
+    var y = 790f
     if (offer.store != "Other") {
         val store = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#77574C"); textSize = 40f; typeface = Typeface.DEFAULT_BOLD

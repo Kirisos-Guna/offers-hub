@@ -163,19 +163,25 @@ async def main() -> None:
                     log.exception("safety poll of %s failed", chat.title)
             await publisher.save_channels()
 
+    async def tidy_up():
+        # Older deals still missing an image or a product name (e.g. after a lookup outage).
+        for offer in db.offers_needing_lookup(LOOKUP_BACKLOG):
+            await telegram_source.enrich_from_link(
+                offer["source_key"], offer["links"], need_image=offer["image"] is None,
+                need_title=offer["weak_title"] == 1)
+        for image in db.expired_images():
+            await image_store.delete(image)
+        removed = db.purge_old()
+        await publisher.full_sync()
+        if removed:
+            log.info("expired %d deals", removed)
+
     async def housekeeping():
         while True:
-            # Older deals still missing an image or a product name (e.g. after a lookup outage).
-            for offer in db.offers_needing_lookup(LOOKUP_BACKLOG):
-                await telegram_source.enrich_from_link(
-                    offer["source_key"], offer["links"], need_image=offer["image"] is None,
-                    need_title=offer["weak_title"] == 1)
-            for image in db.expired_images():
-                await image_store.delete(image)
-            removed = db.purge_old()
-            await publisher.full_sync()
-            if removed:
-                log.info("expired %d deals", removed)
+            try:
+                await tidy_up()
+            except Exception:  # without this, one error would end expiry until the next restart
+                log.exception("housekeeping failed; trying again next hour")
             await asyncio.sleep(HOUSEKEEPING_SECONDS)
 
     tasks = [asyncio.create_task(safety_poll()), asyncio.create_task(housekeeping())]

@@ -1,7 +1,7 @@
 <resources>
     <!-- Feed -->
     <string name="search_hint">சலுகைகள், பிராண்டுகள், பொருட்களைத் தேடுக</string>
-    <string name="status_live">நேரலை · %1$d சலுகைகள்</string>
+    <string name="status_live">நேரலை</string>
     <string name="status_offline">ஆஃப்லைன் · சேமித்த சலுகைகள்</string>
     <string name="status_connecting">இணைக்கிறது…</string>
     <string name="status_error">சர்வரை அடைய முடியவில்லை</string>
@@ -50,6 +50,7 @@
     <string name="share_image">படமாகப் பகிர்</string>
     <string name="share_footer">Offers Hub · நேரலை சலுகைகள்</string>
     <string name="original_post">அசல் பதிவு</string>
+    <string name="share_failed">இந்தச் சலுகையைப் பகிர முடியவில்லை</string>
     <string name="no_app">இந்த இணைப்பைத் திறக்க எந்த ஆப்பும் இல்லை</string>
 
     <!-- Categories -->
@@ -87,6 +88,7 @@
     <string name="section_notifications">அறிவிப்புகள்</string>
     <string name="alerts_title">புதிய சலுகை அறிவிப்புகள்</string>
     <string name="alerts_desc">சலுகை பதிவிடப்பட்ட நொடியே அறிவிப்பு</string>
+    <string name="notif_blocked">Android அமைப்புகளில் Offers Hub அறிவிப்புகள் முடக்கப்பட்டுள்ளன. இயக்க கீழே தட்டவும்.</string>
     <string name="alert_for">எதற்கு அறிவிக்க</string>
     <string name="alert_all">அனைத்தும்</string>
     <string name="alert_keywords">என் சொற்கள்</string>
@@ -108,7 +110,6 @@
     <string name="check_updates">புதுப்பிப்புகளைச் சரிபார்</string>
     <string name="update_check_failed">புதுப்பிப்புகளைச் சரிபார்க்க முடியவில்லை</string>
     <string name="section_about">பற்றி</string>
-    <string name="deals_now">தற்போதைய சலுகைகள்</string>
     <string name="about_text">டெலிகிராம் சலுகை சேனல்களில் பதிவிடப்பட்ட உடனே சலுகைகள் சேகரிக்கப்படுகின்றன. Offers Hub க்கு கணக்கு தேவையில்லை, உங்களைக் கண்காணிப்பதில்லை. வாங்குதல் கடையின் சொந்த ஆப் அல்லது தளத்தில் நடக்கும்.</string>
 
     <!-- In-app update -->

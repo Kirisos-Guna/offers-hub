@@ -12,11 +12,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.offershub.app.R
+import android.widget.Toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -139,7 +142,7 @@ fun OfferDetailSheet(offer: Offer, saved: Boolean, onToggleSave: () -> Unit, onD
                 }
                 val onClick = { openLink(context, link.url) }
                 if (index == 0) {
-                    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(52.dp).padding(vertical = 2.dp)) {
+                    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(vertical = 2.dp)) {
                         Icon(Icons.Filled.ShoppingCart, null, Modifier.size(20.dp))
                         Spacer(Modifier.size(8.dp))
                         Text(label, style = MaterialTheme.typography.labelLarge)
@@ -150,28 +153,31 @@ fun OfferDetailSheet(offer: Offer, saved: Boolean, onToggleSave: () -> Unit, onD
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(
-                    onClick = {
-                        sharingImage = true
-                        scope.launch {
-                            try {
-                                shareDealImage(context, offer)
-                            } finally {
-                                sharingImage = false
-                            }
+            // One above the other: side by side they cut off at large font sizes.
+            FilledTonalButton(
+                onClick = {
+                    sharingImage = true
+                    scope.launch {
+                        try {
+                            shareDealImage(context, offer)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
+                        } finally {
+                            sharingImage = false
                         }
-                    },
-                    enabled = !sharingImage,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Outlined.Share, null, Modifier.size(18.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text(stringResource(R.string.share_image), maxLines = 1)
-                }
-                OutlinedButton(onClick = { shareOffer(context, offer) }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.share_deal), maxLines = 1)
-                }
+                    }
+                },
+                enabled = !sharingImage,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            ) {
+                Icon(Icons.Outlined.Share, null, Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(stringResource(R.string.share_image))
+            }
+            OutlinedButton(onClick = { shareOffer(context, offer) }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.share_deal))
             }
 
             Text(

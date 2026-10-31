@@ -57,7 +57,7 @@ async def retag_links(links: list[dict]) -> list[dict]:
     for link in links:
         try:
             tagged = tag_url(await _resolve(link["url"]))
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
             log.info("couldn't resolve %s: %s", link["url"], exc)
             tagged = None
         out.append({**link, "url": tagged or link["url"]})

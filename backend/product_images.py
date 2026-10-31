@@ -140,6 +140,6 @@ async def lookup(url: str, want_image: bool = True, want_title: bool = False) ->
             if want_image and image is None and page_image:
                 image = await _download(page_image)
         return image, _clean_title(title) if want_title else None
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
         log.info("lookup failed for %s: %s", url, exc)
         return None, None

@@ -75,6 +75,8 @@ class Updater(private val context: Context) {
                         done += read
                         if (total > 0) onProgress((done.toFloat() / total).coerceAtMost(1f))
                     }
+                    // A dropped connection can end the stream early without an error.
+                    if (total > 0 && done < total) throw IOException("Download incomplete")
                 }
             }
         } finally {

@@ -19,7 +19,8 @@ private val rupees = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-
     maximumFractionDigits = 0
 }
 
-fun formatPrice(value: Double): String = rupees.format(value)
+/** NumberFormat isn't thread-safe, and notifications format prices off the main thread. */
+fun formatPrice(value: Double): String = synchronized(rupees) { rupees.format(value) }
 
 /** "Just now", "5 min. ago", "2 hr. ago" in the app's language. */
 fun timeAgo(context: Context, epochSeconds: Long): String {

@@ -118,6 +118,58 @@ async def main():
     db.delete_offers(["tg:-1:1"])
     await pub.full_sync()
     assert doc_id("tg:-1:1") not in offers.docs and doc_id("tg:-1:2") in offers.docs
+    # An edit while lookups fail keeps the image found earlier.
+    import datetime
+    import types
+    import product_images
+    import telegram_source as t
+    save("tg:-1:3", "Loot : Fan at 999 https://amzn.to/c", now)
+    db.save_lookup("tg:-1:3", "https://res.cloudinary.com/x/good.jpg", None)
+
+    async def miss(*a, **k):
+        return None, None
+    product_images.lookup = miss
+    edited = types.SimpleNamespace(message="Loot : Fan at 899 https://amzn.to/c", entities=None, reply_markup=None,
+                                   photo=None, media=None, chat_id=-1, id=3,
+                                   date=datetime.datetime.now(datetime.timezone.utc))
+    await t.handle_message(edited, "Offerzone")
+    assert db.get_offer("tg:-1:3")["image"] == "https://res.cloudinary.com/x/good.jpg"
+    assert db.get_offer("tg:-1:3")["price"] == 899
+
+    # A failed feed write still sends the alert, and a retry covers a dropped request.
+    class Flaky(FakeMessaging):
+        calls = 0
+
+        def send(self, message):
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                raise ConnectionError("dropped")
+            super().send(message)
+
+    class BrokenDoc(FakeDoc):
+        def set(self, data):
+            raise ConnectionError("firestore down")
+
+    class BrokenCollection(FakeCollection):
+        def document(self, key):
+            return BrokenDoc(self, key)
+
+    class BrokenFirestore(FakeFirestore):
+        def collection(self, name):
+            return self.collections.setdefault(name, BrokenCollection())
+
+    flaky = Flaky()
+    broken = Publisher(BrokenFirestore(), flaky)
+    save("tg:-1:4", "GRAB : Mixer at 1,999 https://amzn.to/d", now)
+    await broken.publish("tg:-1:4", notify=True)
+    assert len(flaky.sent) == 1 and Flaky.calls == 2
+
+    # A sister channel's "over" edit marks the deal we kept as ended.
+    save("tg:-1:5", "GRAB : Kettle at 599 https://amzn.to/e", now)
+    repost = {**parse_offer("GRAB : Kettle at 599 https://amzn.to/e"), "expired": True}
+    assert not db.upsert_offer("tg:-2:9", "Other", repost, now, None)
+    assert db.get_offer("tg:-1:5")["expired"] == 1
+
     print("ok publisher")
 
 

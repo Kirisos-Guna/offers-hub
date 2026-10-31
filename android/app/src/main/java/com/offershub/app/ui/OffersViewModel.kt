@@ -15,7 +15,9 @@ import com.offershub.app.data.SortOrder
 import com.offershub.app.data.Store
 import com.offershub.app.data.Updater
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,14 +46,15 @@ data class OffersUiState(
     val query: String = "",
     val sort: SortOrder = SortOrder.Latest,
     val status: FeedStatus = FeedStatus.Connecting,
-    val error: String? = null,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
     /** Deals that arrived while the user was scrolled away from the top. */
     val unseenNew: Int = 0,
-    /** A deal to open as soon as it is in the feed (from a tapped notification). */
+    /** A deal to open as soon as it is in the feed (from a tapped notification or the widget). */
     val pendingOpenId: String? = null,
+    /** A deal fetched on its own because it is older than the loaded pages. */
+    val fetchedDeal: Offer? = null,
 ) {
     val loading: Boolean get() = all.isEmpty() && status == FeedStatus.Connecting
 
@@ -115,6 +118,7 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
     private var atTop = true
     private var live: List<Offer> = emptyList()
     private var older: List<Offer> = emptyList()
+    private var connectTimeout: Job? = null
 
     val updater = Updater(app)
     private val _update = MutableStateFlow<UpdateState>(UpdateState.None)
@@ -133,19 +137,46 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCategory(category: String?) = _state.update { it.copy(selectedCategory = category) }
 
-    /** Loads the next older page (scrolling, or a filter that matches few loaded deals). */
+    /** Loads the next older page: on scrolling, or the "load more" button under a filter. */
     fun loadMore() {
-        val s = _state.value
-        if (s.showSaved || s.loadingMore || s.endReached || s.all.isEmpty() || moreJob?.isActive == true) return
-        _state.update { it.copy(loadingMore = true) }
+        if (moreJob?.isActive == true) return
+        moreJob = viewModelScope.launch { loadPage() }
+    }
+
+    /**
+     * A search or filter only sees loaded deals, so when it matches few of them, a few more pages
+     * are read. It stops there (the user can tap "load more"): reading on until the end would
+     * spend the whole database on one search, and the free plan's daily reads are limited.
+     */
+    fun loadMoreForFilter() {
+        moreJob?.cancel()
         moreJob = viewModelScope.launch {
-            try {
-                val page = source.older(s.all.minOf { it.postedAt }, PAGE_SIZE)
-                older = older + page
-                publish(endReached = page.size < PAGE_SIZE)
-            } catch (e: Exception) {
-                _state.update { it.copy(loadingMore = false) }
+            repeat(FILTER_AUTO_PAGES) {
+                val s = _state.value
+                if (!s.filtering || s.offers.size >= FILTER_ENOUGH) return@launch
+                if (!loadPage()) return@launch
             }
+        }
+    }
+
+    /** Returns false when there is nothing more to load. */
+    private suspend fun loadPage(): Boolean {
+        val s = _state.value
+        if (s.showSaved || s.endReached || s.all.isEmpty()) return false
+        _state.update { it.copy(loadingMore = true) }
+        return try {
+            val page = source.older(s.all.minOf { it.postedAt }, PAGE_SIZE)
+            val known = s.all.mapTo(HashSet()) { it.id }
+            older = older + page
+            val end = page.size < PAGE_SIZE || page.all { it.id in known }
+            publish(endReached = end)
+            !end
+        } catch (e: CancellationException) {
+            _state.update { it.copy(loadingMore = false) }
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(loadingMore = false) }
+            false
         }
     }
 
@@ -164,7 +195,7 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
                 updater.check()?.let { UpdateState.Available(it) }
                     ?: if (manual) UpdateState.UpToDate else UpdateState.None
             } catch (e: Exception) {
-                if (manual) UpdateState.Failed(e.message ?: getApplication<Application>().getString(R.string.update_check_failed)) else UpdateState.None
+                if (manual) UpdateState.Failed(getApplication<Application>().getString(R.string.update_check_failed)) else UpdateState.None
             }
         }
     }
@@ -181,7 +212,7 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
                 val apk = updater.download(update) { p -> _update.value = UpdateState.Downloading(update, p) }
                 UpdateState.Ready(update, apk)
             } catch (e: Exception) {
-                UpdateState.Failed(e.message ?: getApplication<Application>().getString(R.string.download_failed))
+                UpdateState.Failed(getApplication<Application>().getString(R.string.download_failed))
             }
         }
     }
@@ -201,8 +232,12 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() {
+        moreJob?.cancel()
         older = emptyList()
-        _state.update { it.copy(refreshing = true, endReached = false) }
+        _state.update {
+            it.copy(refreshing = true, endReached = false, loadingMore = false,
+                status = if (it.status == FeedStatus.Error) FeedStatus.Connecting else it.status)
+        }
         subscribe()
     }
 
@@ -218,28 +253,67 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
         if (value) _state.update { it.copy(unseenNew = 0) }
     }
 
-    fun openWhenAvailable(id: String) = _state.update { it.copy(pendingOpenId = id) }
+    /** Opens a deal from a notification or the widget, fetching it if it isn't loaded. */
+    fun openWhenAvailable(id: String) {
+        _state.update { it.copy(pendingOpenId = id) }
+        viewModelScope.launch {
+            val found = runCatching { source.offer(id) }.getOrNull()
+            _state.update { s ->
+                when {
+                    s.pendingOpenId != id -> s
+                    found != null -> s.copy(fetchedDeal = found)
+                    s.all.none { it.id == id } -> s.copy(pendingOpenId = null) // the deal is gone
+                    else -> s
+                }
+            }
+        }
+    }
 
     fun consumePendingOpen() = _state.update { it.copy(pendingOpenId = null) }
 
     private companion object {
         const val PAGE_SIZE = 40
+        const val FILTER_AUTO_PAGES = 3
+        const val FILTER_ENOUGH = 20
+        const val CONNECT_TIMEOUT_MS = 12_000L
     }
 
     private fun subscribe() {
         feedJob?.cancel()
+        // Firestore answers from its cache first, so "not live yet" isn't "offline" until the
+        // server has had time to answer.
+        connectTimeout?.cancel()
+        connectTimeout = viewModelScope.launch {
+            delay(CONNECT_TIMEOUT_MS)
+            _state.update { s ->
+                if (s.status != FeedStatus.Connecting) s
+                else s.copy(status = if (s.all.isEmpty()) FeedStatus.Error else FeedStatus.Offline)
+            }
+        }
         feedJob = viewModelScope.launch {
             source.feed().collect { event ->
                 when (event) {
                     is FeedEvent.Data -> {
+                        // An empty cache on first launch says nothing yet about the real feed.
+                        if (event.offers.isEmpty() && !event.live) return@collect
                         val previous = live.maxOfOrNull { it.postedAt } ?: Long.MAX_VALUE
                         val arrived = event.offers.count { it.postedAt > previous }
+                        // New deals push the oldest out of the live window; they stay in the list.
+                        // (A deal missing from inside the window was deleted, so it goes.)
+                        val ids = event.offers.mapTo(HashSet()) { it.id }
+                        val windowStart = event.offers.minOfOrNull { it.postedAt }
+                        if (windowStart != null) {
+                            older = live.filter { it.id !in ids && it.postedAt <= windowStart } + older
+                        }
                         live = event.offers
                         publish()
                         _state.update { s ->
                             s.copy(
-                                status = if (event.live) FeedStatus.Live else FeedStatus.Offline,
-                                error = null,
+                                status = when {
+                                    event.live -> FeedStatus.Live
+                                    s.status == FeedStatus.Live -> FeedStatus.Offline
+                                    else -> s.status
+                                },
                                 refreshing = false,
                                 unseenNew = if (atTop) 0 else s.unseenNew + arrived,
                             )
@@ -248,7 +322,7 @@ class OffersViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     is FeedEvent.Failed -> _state.update {
                         it.copy(status = if (it.all.isEmpty()) FeedStatus.Error else FeedStatus.Offline,
-                            error = event.message, refreshing = false)
+                            refreshing = false)
                     }
                 }
             }

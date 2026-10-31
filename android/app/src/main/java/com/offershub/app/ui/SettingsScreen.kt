@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,6 +44,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,8 +52,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.offershub.app.R
 import com.offershub.app.data.AlertMode
@@ -64,7 +69,6 @@ private val DISCOUNT_STEPS = listOf(0, 50, 70, 80)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    dealCount: Int,
     update: UpdateState,
     installedVersion: String,
     onCheckUpdate: () -> Unit,
@@ -79,6 +83,12 @@ fun SettingsScreen(
     val alertMode by settings.alertMode.collectAsStateWithLifecycle()
     val keywords by settings.keywords.collectAsStateWithLifecycle()
     var newKeyword by rememberSaveable { mutableStateOf("") }
+    // Re-checked on return from Android's settings page.
+    var systemAllows by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        systemAllows = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        onPauseOrDispose {}
+    }
     val themeLabels = mapOf(
         ThemeMode.System to stringResource(R.string.theme_system),
         ThemeMode.Light to stringResource(R.string.theme_light),
@@ -103,7 +113,8 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(), // keeps the keyword box above the keyboard
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Section(stringResource(R.string.section_appearance)) {
@@ -153,6 +164,14 @@ fun SettingsScreen(
                     checked = notifications,
                     onChange = settings::setNotifications,
                 )
+                if (notifications && !systemAllows) {
+                    Text(
+                        stringResource(R.string.notif_blocked),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (notifications) {
                     Text(
                         stringResource(R.string.alert_for),
@@ -168,7 +187,8 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     stringResource(if (mode == AlertMode.AllDeals) R.string.alert_all else R.string.alert_keywords),
-                                    maxLines = 1, softWrap = false,
+                                    maxLines = 2,
+                                    textAlign = TextAlign.Center,
                                 )
                             }
                         }
@@ -273,12 +293,10 @@ fun SettingsScreen(
             }
 
             Section(stringResource(R.string.section_about)) {
-                InfoRow(stringResource(R.string.deals_now), dealCount.toString())
                 Text(
                     stringResource(R.string.about_text),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }

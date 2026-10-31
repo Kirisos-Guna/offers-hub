@@ -104,6 +104,34 @@ def test_expired_edits():
     assert not parse_offer("GRAB : Fan at 999 https://fkrt.it/x")["expired"]
 
 
+def test_rs_inside_a_word_is_not_a_price():
+    assert parse_offer("Pack of Stickers 100 pcs at 299 https://amzn.to/a")["price"] == 299
+    assert parse_offer("Boat Trimmers 3 in 1 at 899 https://amzn.to/a")["price"] == 899
+    assert parse_offer("Oil Rs.140 https://amzn.to/a")["price"] == 140
+    assert parse_offer("Oil Rs 140 https://amzn.to/a")["price"] == 140
+
+
+def test_amounts_off_are_not_prices():
+    assert parse_offer("Parachute Oil Combo\nhttps://amzn.to/a\nApply ₹200 Coupon")["price"] is None
+    assert parse_offer("Lifetime Free Card\nGet ₹500 Cashback https://amzn.to/a")["price"] is None
+    assert parse_offer("Earbuds\nSave ₹300 https://amzn.to/a")["price"] is None
+    assert parse_offer("Fridge at 49,990\nApply ₹4000 Coupon https://amzn.to/a")["price"] == 49990
+
+
+def test_hundred_percent_off():
+    assert parse_offer("100% Off : Free Sample Pack https://amzn.to/a")["discount"] == 100
+
+
+def test_edit_notice_is_not_the_title():
+    o = parse_offer("Edit - Over Now ❌\n\nBoat Earbuds at 899 https://amzn.to/a")
+    assert o["title"] == "Boat Earbuds" and o["price"] == 899 and o["expired"]
+
+
+def test_broken_url_does_not_crash():
+    o = parse_offer("Deal at 99 https://[broken/x https://amzn.to/a")
+    assert [l["url"] for l in o["links"]] == ["https://amzn.to/a"]
+
+
 def test_named_product_is_not_weak():
     assert not parse_offer("Yellow Hat at 449.\n\nhttps://amzn.to/4BmgyrR")["weak_title"]
 

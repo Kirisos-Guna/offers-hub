@@ -48,8 +48,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // -PversionCodeOverride / -PversionNameOverride build an older-looking copy, to test updates.
-        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toInt() ?: 5
-        versionName = providers.gradleProperty("versionNameOverride").orNull ?: "2.1.0"
+        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toInt() ?: 6
+        versionName = providers.gradleProperty("versionNameOverride").orNull ?: "2.1.1"
 
         firebaseConfig?.let {
             resValue("string", "google_app_id", it.appId)

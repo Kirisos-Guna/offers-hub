@@ -81,6 +81,9 @@ def upsert_offer(source_key: str, source: str, offer: dict, posted_at: int, imag
                 (key, posted_at),
             ).fetchone()
             if dup:
+                if offer.get("expired"):  # a sister channel says the deal we kept is over
+                    _conn.execute("UPDATE offers SET expired = 1 WHERE id = ?", (dup["id"],))
+                    _conn.commit()
                 return False
         _conn.execute(
             """
@@ -158,16 +161,18 @@ def reparse_all(parse) -> int:
             offer = parse(row["text"])
             if offer is None:
                 continue
-            kept_name = row["weak_title"] == 2 and offer["weak_title"]
+            # A title from a lookup, or a placeholder with the store a redirect revealed, stays.
+            kept_name = row["weak_title"] != 0 and offer["weak_title"]
             title = row["title"] if kept_name else offer["title"]
             category = categorize(title, row["text"]) if kept_name else offer["category"]
+            weak = row["weak_title"] or int(offer["weak_title"])  # newly vague: gets a name lookup
             new = (title, offer["tag"], offer["price"], offer["mrp"], offer["discount"], category,
-                   int(offer["expired"]))
+                   int(offer["expired"]), weak)
             if new != (row["title"], row["tag"], row["price"], row["mrp"], row["discount"], row["category"],
-                       row["expired"]):
+                       row["expired"], row["weak_title"]):
                 _conn.execute(
                     """UPDATE offers SET title = ?, tag = ?, price = ?, mrp = ?, discount = ?, category = ?,
-                       expired = ? WHERE id = ?""",
+                       expired = ?, weak_title = ? WHERE id = ?""",
                     (*new, row["id"]),
                 )
                 changed += 1
